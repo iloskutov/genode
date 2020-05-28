@@ -1,0 +1,125 @@
+From 7b5290db20eacf5675a664e755ae6c59434764a4 Mon Sep 17 00:00:00 2001
+From: Ivan Loskutov <loskutov.ivan@gmail.com>
+Date: Wed, 27 May 2020 00:02:46 +0300
+Subject: [PATCH] usb_serial for dde_linux
+
+---
+ drivers/usb/serial/ftdi_sio.c      |  2 +-
+ drivers/usb/serial/option.c        |  2 +-
+ drivers/usb/serial/pl2303.c        |  2 +-
+ include/linux/usb/serial.h         | 17 +++++++----------
+ include/uapi/asm-generic/termios.h |  4 ++--
+ include/uapi/linux/termios.h       |  2 +-
+ 6 files changed, 13 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/usb/serial/ftdi_sio.c b/drivers/usb/serial/ftdi_sio.c
+index 87202ad..583f7d0 100644
+--- a/drivers/usb/serial/ftdi_sio.c
++++ b/drivers/usb/serial/ftdi_sio.c
+@@ -2504,7 +2504,7 @@ static int ftdi_ioctl(struct tty_struct *tty,
+ 	return -ENOIOCTLCMD;
+ }
+ 
+-module_usb_serial_driver(serial_drivers, id_table_combined);
++module_usb_serial_driver(ftdi_so, serial_drivers, id_table_combined);
+ 
+ MODULE_AUTHOR(DRIVER_AUTHOR);
+ MODULE_DESCRIPTION(DRIVER_DESC);
+diff --git a/drivers/usb/serial/option.c b/drivers/usb/serial/option.c
+index 2d8d915..50a6204 100644
+--- a/drivers/usb/serial/option.c
++++ b/drivers/usb/serial/option.c
+@@ -2107,7 +2107,7 @@ static struct usb_serial_driver * const serial_drivers[] = {
+ 	&option_1port_device, NULL
+ };
+ 
+-module_usb_serial_driver(serial_drivers, option_ids);
++module_usb_serial_driver(option, serial_drivers, option_ids);
+ 
+ static int option_probe(struct usb_serial *serial,
+ 			const struct usb_device_id *id)
+diff --git a/drivers/usb/serial/pl2303.c b/drivers/usb/serial/pl2303.c
+index 46dd09d..4ce286c 100644
+--- a/drivers/usb/serial/pl2303.c
++++ b/drivers/usb/serial/pl2303.c
+@@ -1020,7 +1020,7 @@ static struct usb_serial_driver * const serial_drivers[] = {
+ 	&pl2303_device, NULL
+ };
+ 
+-module_usb_serial_driver(serial_drivers, id_table);
++module_usb_serial_driver(pl2303, serial_drivers, id_table);
+ 
+ MODULE_DESCRIPTION("Prolific PL2303 USB to serial adaptor driver");
+ MODULE_LICENSE("GPL v2");
+diff --git a/include/linux/usb/serial.h b/include/linux/usb/serial.h
+index 106551a..02168d4 100644
+--- a/include/linux/usb/serial.h
++++ b/include/linux/usb/serial.h
+@@ -387,8 +387,10 @@ static inline void usb_serial_debug_data(struct device *dev,
+ 					 const char *function, int size,
+ 					 const unsigned char *data)
+ {
++#if 0
+ 	dev_dbg(dev, "%s - length = %d, data = %*ph\n",
+ 		function, size, size, data);
++#endif
+ }
+ 
+ /*
+@@ -418,20 +420,15 @@ do {									\
+  *
+  */
+ #define usb_serial_module_driver(__name, __serial_drivers, __ids)	\
+-static int __init usb_serial_module_init(void)				\
++static int __init usb_serial_module_init_ ## __name(void)				\
+ {									\
+ 	return usb_serial_register_drivers(__serial_drivers,		\
+-					   __name, __ids);		\
+-}									\
+-module_init(usb_serial_module_init);					\
+-static void __exit usb_serial_module_exit(void)				\
+-{									\
+-	usb_serial_deregister_drivers(__serial_drivers);		\
++					   # __name, __ids);		\
+ }									\
+-module_exit(usb_serial_module_exit);
++module_init(usb_serial_module_init_ ## __name);					\
+ 
+-#define module_usb_serial_driver(__serial_drivers, __ids)		\
+-	usb_serial_module_driver(KBUILD_MODNAME, __serial_drivers, __ids)
++#define module_usb_serial_driver(__name, __serial_drivers, __ids)		\
++	usb_serial_module_driver(__name, __serial_drivers, __ids)
+ 
+ #endif /* __LINUX_USB_SERIAL_H */
+ 
+diff --git a/include/uapi/asm-generic/termios.h b/include/uapi/asm-generic/termios.h
+index cf89293..9c18eec 100644
+--- a/include/uapi/asm-generic/termios.h
++++ b/include/uapi/asm-generic/termios.h
+@@ -9,8 +9,8 @@
+  * New architectures should not provide their own version.
+  */
+ 
+-#include <asm/termbits.h>
+-#include <asm/ioctls.h>
++#include <asm-generic/termbits.h>
++#include <asm-generic/ioctls.h>
+ 
+ struct winsize {
+ 	unsigned short ws_row;
+diff --git a/include/uapi/linux/termios.h b/include/uapi/linux/termios.h
+index 33961d4..6d79b68 100644
+--- a/include/uapi/linux/termios.h
++++ b/include/uapi/linux/termios.h
+@@ -3,7 +3,7 @@
+ #define _LINUX_TERMIOS_H
+ 
+ #include <linux/types.h>
+-#include <asm/termios.h>
++#include <asm-generic/termios.h>
+ 
+ #define NFF	5
+ 
+-- 
+2.26.2
+

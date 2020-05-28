@@ -30,11 +30,50 @@ struct Main
 	{
 		log("--- UART test started ---");
 
-		for (unsigned i = 0; ; ++i) {
-			int n = snprintf(buf, sizeof(buf), "UART test message %d\n", i);
-			uart.write(buf, n);
-			timer.msleep(2000);
+#if 0
+		int n = snprintf(buf, sizeof(buf), "UART hello\n");
+		uart.write(buf, n);
+
+		for (;;) {
+			if (uart.avail()) {
+				int n = uart.read(buf, 10);
+				uart.write(buf, n);
+			}
 		}
+#else
+		const char send[] = "AT\r\n";
+		char recv[100] = { 0 };
+		int pos = 0;
+
+		size_t cnt = 0;
+		for (;;) {
+			uart.write(send, sizeof(send) - 1);
+			warning("send: ", send);
+
+			cnt = 1000000;
+			while (cnt != 0) {
+				if (uart.avail()) {
+					int r = uart.read(recv + pos, sizeof(recv) - pos);
+					for (int k = 0; k < r; k++)
+						warning("> ", Hex(recv[pos + k]));
+					pos += r;
+
+					if (recv[pos - 1] == '\n')
+						break;
+				}
+				cnt--;
+			}
+			if (cnt == 0)
+				error("Timeout");
+
+			recv[pos + 1] = '\0';
+
+			warning("recv: ", (const char*) recv);
+			pos = 0;
+			memset(recv, 0, sizeof(recv));
+			timer.msleep(1000);
+		}
+#endif
 	}
 };
 

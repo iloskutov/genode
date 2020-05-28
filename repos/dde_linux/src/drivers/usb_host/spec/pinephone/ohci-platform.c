@@ -17,7 +17,6 @@
 
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
-#include <linux/usb/ohci_pdriver.h>
 #include <../drivers/usb/host/ohci.h>
 
 #define DRIVER_DESC "OHCI generic platform driver"

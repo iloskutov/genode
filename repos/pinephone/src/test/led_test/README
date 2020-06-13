@@ -1,0 +1,17 @@
+LED (schematics):
+PD18-R
+PD19-G
+PD20-B
+
+Real device:
+PD18 - 114 - G
+PD19 - 115 - R
+PD20 - 116 - B
+
+
+linux name to pin number conversion:
+def gpio(name):
+    port = name[1]
+    port = ord(port) - ord('A')
+    pin = int(name[2:])
+    return (port * 32) + pin

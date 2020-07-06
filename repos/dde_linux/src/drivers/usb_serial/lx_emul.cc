@@ -207,9 +207,7 @@ namespace Usb_serial {
 	struct OutOfMemory : Genode::Exception { };
 };
 
-static tty_device * single_tty_device = nullptr;
-
-
+static tty_device * single_tty_device[8] = { 0 };
 
 extern "C" struct device *tty_register_device(struct tty_driver *driver,
 					  unsigned index, struct device *device)
@@ -240,27 +238,29 @@ extern "C" struct device *tty_register_device(struct tty_driver *driver,
 	// retval = device_register(dev);
 	// if (retval)
 	// 	goto err_put;
-	if (single_tty_device)
+	if (single_tty_device[index])
 		throw Usb_serial::DeviceBusy();
 
 	Genode::log(__PRETTY_FUNCTION__, ": register device ", (const char*) name);
 
 	// TODO: register somewhere in Driver class
-	single_tty_device = (struct tty_device *) kzalloc(sizeof(*single_tty_device), GFP_LX_DMA);
-	if (!single_tty_device)
+	single_tty_device[index] = (struct tty_device *) kzalloc(sizeof(*single_tty_device[0]), GFP_LX_DMA);
+	if (!single_tty_device[index])
 		throw Usb_serial::OutOfMemory();
 
-	single_tty_device->dev = dev;
-	single_tty_device->index = index;
-	single_tty_device->driver = driver;
+	single_tty_device[index]->dev = dev;
+	single_tty_device[index]->index = index;
+	single_tty_device[index]->driver = driver;
 
 	return dev;
 }
 
-tty_device * Uart::Session_component::_register_session_component(Uart::Session_component & s)
+tty_device * Uart::Session_component::_register_session_component(unsigned index, Uart::Session_component & s)
 {
-	if (single_tty_device) single_tty_device->session_component = (void*) &s;
-	return single_tty_device;
+	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, "index: ", index);
+
+	if (single_tty_device[index]) single_tty_device[index]->session_component = (void*) &s;
+	return single_tty_device[index];
 }
 
 void tty_port_tty_set(struct tty_port *port, struct tty_struct *tty)
@@ -277,14 +277,24 @@ extern "C" int tty_insert_flip_string_fixed_flag(struct tty_port *port,
 		const unsigned char *chars, char flag, size_t size)
 {
 	int copied = 0;
-	if (single_tty_device && size) {
-		Uart::Driver::Ring_buffer *buf = (Uart::Driver::Ring_buffer *) single_tty_device->_rx_buf;
-		const unsigned char *p = chars;
-		// TODO: flags ???
-		while (size--) {
-			buf->add(*p);
-			p++;
-			copied++;
+
+	Genode::error("port: ", Genode::Hex((unsigned)port));
+	if (port) {
+		Genode::error("port->tty: ", Genode::Hex((unsigned)port->tty));
+		if (port->tty)
+			Genode::error("port->tty->index: ", Genode::Hex((unsigned)port->tty->index));
+	}
+
+	if (single_tty_device[port->tty->index] && size) {
+		Uart::Driver::Ring_buffer *buf = (Uart::Driver::Ring_buffer *) single_tty_device[port->tty->index]->_rx_buf;
+		if (buf) {
+			const unsigned char *p = chars;
+			// TODO: flags ???
+			while (size--) {
+				buf->add(*p);
+				p++;
+				copied++;
+			}
 		}
 	}
 	return copied;
@@ -320,6 +330,7 @@ int tty_port_open(struct tty_port *port, struct tty_struct *tty, struct file *fi
 
 void Driver::Device::probe_interface(usb_interface * iface, usb_device_id * id)
 {
+	static unsigned index = 0;
 	int rc = 1;
 	Genode::log(__PRETTY_FUNCTION__);
 	// Genode::log("serial_driver: ", serial_driver);
@@ -345,11 +356,12 @@ void Driver::Device::probe_interface(usb_interface * iface, usb_device_id * id)
 
 	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, " rc: ", rc);
 
-	if (rc == 0 && single_tty_device) {
+	if (rc == 0 && single_tty_device[index]) {
 
 		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__);
 
-		struct tty_struct * tty = tty_init_dev(single_tty_device->driver, single_tty_device->index);
+		struct tty_struct * tty = tty_init_dev(single_tty_device[index]->driver,
+												single_tty_device[index]->index);
 
 		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__);
 
@@ -366,14 +378,22 @@ void Driver::Device::probe_interface(usb_interface * iface, usb_device_id * id)
 
 		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__);
 
-		single_tty_device->tty = tty;
+		single_tty_device[index]->tty = tty;
 
-		driver.env.parent().announce(driver.ep.manage(driver.root));
+		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, "index: ", index, "tty->index: ", tty->index);
+		if (tty->index != index) {
+			Genode::error("something wrong with index");
+			Genode::Exception();
+		}
+
+		// ???
 
 	} else {
 		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, " rc: ", rc);
 		throw Genode::Exception();
 	}
+
+	index++;
 }
 
 int tty_standard_install(struct tty_driver *driver, struct tty_struct *tty)
@@ -1060,7 +1080,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 	int retval;
 
 
-	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__);
+	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, "index: ", idx);
 	/*
 	 * First time open is complex, especially for PTY devices.
 	 * This code guarantees that either everything succeeds and the
@@ -1073,7 +1093,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 		retval = -ENOMEM;
 		goto err_module_put;
 	}
-	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__);
+	Genode::error(__PRETTY_FUNCTION__, ":", __LINE__, ", idx: ", idx, ", tty: ", Genode::Hex((size_t)tty));
 	retval = tty_driver_install_tty(driver, tty);
 	if (retval < 0)
 		goto err_free_tty;
@@ -1087,6 +1107,7 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 			__func__, tty->driver->name);
 
 	tty->port->itty = tty;
+
 	return tty;
 
 err_free_tty:

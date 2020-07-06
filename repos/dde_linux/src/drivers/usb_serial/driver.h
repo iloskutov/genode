@@ -98,7 +98,7 @@ struct Driver
 	Genode::Allocator_avl           alloc          { &heap };
 
 	Uart::Driver_factory            factory        { env, heap           };
-	Uart::Root                      root           { env, heap, factory };
+	Uart::Root                      uart_root      { env, heap, factory };
 
 	Genode::Constructible<Task>     main_task;
 	Genode::Constructible<Genode::Attached_rom_dataspace> report_rom;

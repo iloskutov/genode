@@ -105,14 +105,16 @@ struct Uart::Driver_factory
 	struct Not_available {};
 
     // TODO: ???
-	enum { UARTS_NUM = 1 };
+	enum { UARTS_NUM = 8 };
 
 	Genode::Env  &env;
 	Genode::Heap &heap;
 	Driver       *drivers[UARTS_NUM] { nullptr };
 
 	Driver_factory(Genode::Env &env, Genode::Heap &heap)
-	: env(env), heap(heap) {}
+	: env(env), heap(heap) {
+		for (unsigned i = 0; i < UARTS_NUM; i++) drivers[i] = 0;
+	}
 
 
 	Uart::Driver &create(unsigned index, unsigned baudrate,

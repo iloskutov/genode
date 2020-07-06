@@ -327,21 +327,42 @@ struct device *kobj_to_dev(struct kobject *kobj)
 	return NULL;
 }
 
-void kref_get(struct kref *kref)
-{
-	TRACE;
-}
-
+/******************
+ ** linux/kref.h **
+ ******************/
+#if 0
 void kref_init(struct kref *kref)
 {
-	TRACE;
+	lx_log(DEBUG_KREF,"%s ref: %p", __func__, kref);
+	atomic_set(&kref->refcount, 1);
+}
+
+void kref_get(struct kref *kref)
+{
+	atomic_inc(&kref->refcount);
+	lx_log(DEBUG_KREF, "%s ref: %p c: %d", __func__, kref, kref->refcount.counter);
 }
 
 int  kref_put(struct kref *kref, void (*release) (struct kref *kref))
 {
-	TRACE_AND_STOP;
-	return -1;
+	lx_log(DEBUG_KREF, "%s: ref: %p c: %d", __func__, kref, kref->refcount.counter);
+
+	if(!atomic_dec_return(&kref->refcount)) {
+		release(kref);
+		return 1;
+	}
+	return 0;
 }
+#else
+void kref_init(struct kref *kref) {}
+void kref_get(struct kref *kref) {}
+int  kref_put(struct kref *kref, void (*release) (struct kref *kref)) {
+	return 0;
+}
+
+
+
+#endif
 
 int kstrtou8(const char *s, unsigned int base, u8 *res)
 {

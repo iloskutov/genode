@@ -78,9 +78,24 @@ void Driver::Device::register_device()
 			else        udev->ep_in[epnum]  = ep;
 		}
 
+#define PINEPHONE_WORKAROUND
+
 		struct usb_device_id   id;
+#ifdef PINEPHONE_WORKAROUND
+		if (i < 4) {
+			Genode::error("Probe: ", i);
+			probe_interface(iface, &id);
+		} else {
+			Genode::error("Skip iface: ", i);
+		}
+#else
 		probe_interface(iface, &id);
+#endif
 	}
+
+	Genode::error("announce");
+	driver.env.parent().announce(driver.ep.manage(driver.uart_root));
+	Genode::error("announce end");
 }
 
 

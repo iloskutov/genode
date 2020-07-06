@@ -66,7 +66,7 @@ class Uart::Session_component : public Rpc_object<Uart::Session,
 
 		Size _size;
 
-		static tty_device * _register_session_component(Session_component &);
+		static tty_device * _register_session_component(unsigned index, Session_component &);
 
 		unsigned char _poll_char()
 		{
@@ -139,7 +139,7 @@ class Uart::Session_component : public Rpc_object<Uart::Session,
 		                  unsigned index, unsigned baudrate, bool detect_size)
 		:
 			_io_buffer(env.ram(), env.rm(), IO_BUFFER_SIZE),
-			_ttydev(_register_session_component(*this)),
+			_ttydev(_register_session_component(index, *this)),
 			_driver_factory(driver_factory),
 			_driver(_driver_factory.create(index, baudrate, _char_avail, _ttydev)),
 			_size(detect_size ? _detect_size() : Size(0, 0))
@@ -241,6 +241,8 @@ class Uart::Root : public Uart::Root_component
 			unsigned const index       = policy.attribute_value("uart",        0U);
 			unsigned const baudrate    = policy.attribute_value("baudrate",    0U);
 			bool     const detect_size = policy.attribute_value("detect_size", false);
+
+			Genode::error(__PRETTY_FUNCTION__, ", label: ", label, ", index: ", index);
 
 			return new (md_alloc())
 				Session_component(_env, _driver_factory, index,

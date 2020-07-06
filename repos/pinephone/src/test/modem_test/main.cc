@@ -15,24 +15,17 @@
 /* Genode includes */
 #include <base/component.h>
 #include <base/attached_rom_dataspace.h>
-#include <gpio_session/connection.h>
 #include <irq_session/client.h>
 #include <timer_session/connection.h>
 #include <uart_session/connection.h>
 
 using namespace Genode;
 
-#define PORT(l, p) (((l) - 'A') * 32 + (p))
 
 
 struct Main
 {
 	Env                    &env;
-	// Gpio::Connection        pwr_key     { env, PORT('B', 3) };
-	// Gpio::Connection        pwr     { env, PORT('L', 7) };
-	// Gpio::Connection        reset     { env, PORT('C', 4) };
-	// Gpio::Connection        disable     { env, PORT('H', 8) };
-	// Gpio::Connection        wakeup     { env, PORT('H', 7) };
 	Timer::Connection       timer    { env };
 
 	Main(Env &env);
@@ -42,24 +35,7 @@ struct Main
 Main::Main(Env &env) : env(env)
 {
 	log("--- Modem test ---");
-#if 0
-	disable.write(false);
-	wakeup.write(false);
-	timer.msleep(200);
 
-	reset.write(false);
-	timer.msleep(500);
-
-	// pwr.write(true);
-	// timer.msleep(200);
-	pwr_key.write(true);
-	timer.msleep(200);
-	pwr_key.write(false);
-#endif
-
-	timer.msleep(1000);
-
-	// connect to modem
 	{
 		Uart::Connection  uart(env);
 
@@ -72,7 +48,7 @@ Main::Main(Env &env) : env(env)
 			uart.write(send, sizeof(send) - 1);
 			warning("send: ", send);
 
-			cnt = 1000000;
+			cnt = 100000;
 			while (cnt != 0) {
 				if (uart.avail()) {
 					int r = uart.read(recv + pos, sizeof(recv) - pos);

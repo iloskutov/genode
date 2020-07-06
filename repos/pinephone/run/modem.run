@@ -82,7 +82,7 @@ append config {
 			<any-service> <parent/> <any-child/> </any-service>
 		</route>
 		<config>
-			<policy label_prefix="modem_test" uart="0" detect_size="no"/>
+			<policy label_prefix="modem_test" uart="2" detect_size="no"/>
 		</config>
 	</start>
 

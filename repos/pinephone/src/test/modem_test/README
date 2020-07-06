@@ -1,0 +1,27 @@
+PB3_PWRKEY=35
+PL7_PWR=359
+PC4_RESET=68
+PH8_DISABLE=232
+PH7_WAKEUP=231
+
+echo $PL7_PWR > $GPIO/export
+echo $PC4_RESET > $GPIO/export
+echo $PH7_WAKEUP > $GPIO/export
+echo $PH8_DISABLE > $GPIO/export
+echo $PB3_PWRKEY > $GPIO/export
+
+echo out > $PIN$PH8_DISABLE/direction
+echo out > $PIN$PH7_WAKEUP/direction
+echo out > $PIN$PC4_RESET/direction
+echo out > $PIN$PL7_PWR/direction
+echo out > $PIN$PB3_PWRKEY/direction
+
+echo 0 > $PIN$PH8_DISABLE/value
+echo 0 > $PIN$PH7_WAKEUP/value
+echo 0 > $PIN$PC4_RESET/value
+
+echo 1 > $PIN$PL7_PWR/value
+sleep 0.1
+echo 1 > $PIN$PB3_PWRKEY/value
+sleep 0.2
+echo 0 > $PIN$PB3_PWRKEY/value

@@ -28,6 +28,7 @@
 #include <lx_emul/impl/completion.h>
 #include <lx_emul/impl/wait.h>
 #include <lx_emul/impl/usb.h>
+#include <lx_emul/impl/gfp.h>
 
 #include <lx_kit/backend_alloc.h>
 
@@ -174,6 +175,9 @@ unsigned long jiffies;
 
 Genode::Ram_dataspace_capability Lx::backend_alloc(Genode::addr_t size, Genode::Cache_attribute cached) {
 	return Lx_kit::env().env().ram().alloc(size, cached); }
+
+void Lx::backend_free(Genode::Ram_dataspace_capability cap) {
+	return Lx_kit::env().env().ram().free(cap); }
 
 const char *dev_name(const struct device *dev) { return dev->name; }
 
@@ -367,7 +371,7 @@ void Driver::Device::probe_interface(usb_interface * iface, usb_device_id * id)
 		driver.env.parent().announce(driver.ep.manage(driver.root));
 
 	} else {
-	Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, " rc: ", rc);
+		Genode::log(__PRETTY_FUNCTION__, ":", __LINE__, " rc: ", rc);
 		throw Genode::Exception();
 	}
 }
@@ -1164,5 +1168,14 @@ struct usb_interface *usb_get_intf(struct usb_interface *intf)
 	if (intf)
 		get_device(&intf->dev);
 	return intf;
+}
+
+unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order)
+{
+	struct page * pages = alloc_pages(gfp_mask, order);
+	if (!pages)
+		return 0;
+
+	return (unsigned long)pages->addr;
 }
 

@@ -23,14 +23,14 @@
 
 #define DEBUG_COMPLETION   0
 #define DEBUG_DMA          0
-#define DEBUG_DRIVER       0
+#define DEBUG_DRIVER       1
 #define DEBUG_KREF         0
 #define DEBUG_SKB          0
 #define DEBUG_SLAB         0
 #define DEBUG_TIMER        0
 #define DEBUG_THREAD       0
-#define DEBUG_TRACE        0
-#define DEBUG_LINUX_PRINTK 0
+#define DEBUG_TRACE        1
+#define DEBUG_LINUX_PRINTK 1
 #include <lx_emul/printf.h>
 
 #include <lx_emul/types.h>
@@ -193,6 +193,13 @@ void *kzalloc(size_t size, gfp_t flags);
 
 #define PAGE_SIZE 4096UL
 #define PAGE_MASK (~(PAGE_SIZE-1))
+
+struct page
+{
+	atomic_t   _count;
+	void      *addr;
+	dma_addr_t paddr;
+} __attribute((packed));
 
 struct page *virt_to_page(const void *addr);
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)

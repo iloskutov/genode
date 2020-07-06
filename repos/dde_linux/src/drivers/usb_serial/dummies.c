@@ -682,9 +682,6 @@ struct urb *usb_get_from_anchor(struct usb_anchor *anchor)
 	return NULL;
 }
 
-unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order) { TRACE; return 0; }
-void free_pages(unsigned long addr, unsigned int order) { TRACE; }
-
 void tty_port_tty_hangup(struct tty_port *port, bool check_clocal)
 {
 	TRACE_AND_STOP;

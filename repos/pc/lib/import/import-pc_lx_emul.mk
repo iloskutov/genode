@@ -27,6 +27,7 @@ INC_DIR += $(REP_DIR)/src/include
 CC_OPT_drivers/usb/host/xhci-trace      += -I$(LX_SRC_DIR)/drivers/usb/host
 CC_OPT_drivers/base/regmap/regmap       += -I$(LX_SRC_DIR)/drivers/base/regmap
 
+ifndef DRIVER_LIB
 SRC_CC  += lx_emul/clock.cc
 SRC_CC  += lx_emul/io_mem.cc
 SRC_CC  += lx_emul/io_port.cc
@@ -72,4 +73,6 @@ SRC_C   += lx_emul/shadow/drivers/acpi/glue.c
 SRC_C   += lx_emul/shadow/drivers/acpi/property.c
 SRC_C   += lx_emul/shadow/drivers/acpi/scan.c
 SRC_C   += lx_emul/shadow/drivers/acpi/utils.c
+endif
+
 endif

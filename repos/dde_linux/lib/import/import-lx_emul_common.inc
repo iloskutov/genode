@@ -3,12 +3,15 @@ DDE_LINUX_DIR := $(subst /src/include/lx_kit,,$(call select_from_repositories,sr
 #
 # Create symbol alias for jiffies, sharing the value of jiffies_64
 #
+ifndef DRIVER_LIB
 LD_OPT += --defsym=jiffies=jiffies_64
+endif
 
 #
 # Lx_emul + Lx_kit definitions
 #
 
+ifndef DRIVER_LIB
 SRC_CC  += lx_emul/alloc.cc
 SRC_CC  += lx_emul/debug.cc
 SRC_CC  += lx_emul/init.cc
@@ -48,12 +51,15 @@ SRC_CC  += lx_kit/memory.cc
 SRC_CC  += lx_kit/scheduler.cc
 SRC_CC  += lx_kit/task.cc
 SRC_CC  += lx_kit/timeout.cc
+endif
 
 # RCU for UP
+ifndef DRIVER_LIB
 ifdef RCU_TINY
 SRC_C += lx_emul/shadow/kernel/rcu/tiny.c
 else
 SRC_C += lx_emul/shadow/kernel/rcu/tree.c
+endif
 endif
 
 ifeq ($(filter-out $(SPECS),x86_32),)
@@ -61,8 +67,10 @@ LX_ARCH   := x86
 GEN_ARCH  := x86
 SPEC_ARCH := x86_32
 
+ifndef DRIVER_LIB
 SRC_C += lx_emul/shadow/arch/x86/kernel/irq.c
 SRC_C += lx_emul/shadow/arch/x86/kernel/setup_percpu.c
+endif
 endif
 
 ifeq ($(filter-out $(SPECS),x86_64),)
@@ -70,8 +78,10 @@ LX_ARCH   := x86
 GEN_ARCH  := x86
 SPEC_ARCH := x86_64
 
+ifndef DRIVER_LIB
 SRC_C += lx_emul/shadow/arch/x86/kernel/irq.c
 SRC_C += lx_emul/shadow/arch/x86/kernel/setup_percpu.c
+endif
 endif
 
 ifeq ($(filter-out $(SPECS),arm_v7),)
@@ -91,7 +101,7 @@ SRC_C += lx_emul/shadow/arch/arm64/kernel/cacheinfo.c
 SRC_C += lx_emul/shadow/arch/arm64/kernel/cpufeature.c
 endif
 
-ifneq ($(SHARED_LIB),)
+ifneq ($(or $(SHARED_LIB), $(DRIVER_LIB)),)
 TARGET_SOURCE_LIST := $(TARGET_LIB_DIR)/spec/$(SPEC_ARCH)/source.list
 else
 TARGET_SOURCE_LIST := $(PRG_DIR)/source.list
@@ -100,8 +110,10 @@ endif
 SHADOW_INC_DIR      := $(DDE_LINUX_DIR)/src/include/lx_emul/shadow/include
 SPEC_SHADOW_INC_DIR := $(DDE_LINUX_DIR)/src/include/lx_emul/shadow/arch/$(LX_ARCH)/include
 
+ifndef DRIVER_LIB
 SRC_C   += lx_emul/spec/$(GEN_ARCH)/start.c
 SRC_S   += lx_kit/spec/$(SPEC_ARCH)/setjmp.S
+endif
 
 INC_DIR += $(DDE_LINUX_DIR)/src/include/spec/$(SPEC_ARCH)
 INC_DIR += $(DDE_LINUX_DIR)/src/include
@@ -265,6 +277,7 @@ echo "}" >> $(1);
 endef
 
 
+ifndef DRIVER_LIB
 # 'module_init' calls should only be in C-sources
 INITCALL_OBJECTS = $(addsuffix .o,$(basename $(SRC_C)))
 
@@ -282,4 +295,4 @@ initcall_table.c:
 	@$(call print_function_start,$@)
 	@$(foreach sym,$(INITCALLS),$(call print_call,$(sym),$@))
 	@$(call print_function_end,$@)
-
+endif

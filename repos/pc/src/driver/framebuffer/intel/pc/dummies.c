@@ -47,25 +47,11 @@ EXPORT_SYMBOL_GPL(smp_ops);
 
 DEFINE_PER_CPU_READ_MOSTLY(cpumask_var_t, cpu_sibling_map);
 
-#ifndef __x86_64__
-void * high_memory = NULL;
-
-void iomap_free(resource_size_t base, unsigned long size)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-unsigned long __FIXADDR_TOP = 0xfffff000;
-#endif
-
-
-#ifdef __x86_64__
 extern unsigned long arch_scale_cpu_capacity(int cpu);
 unsigned long arch_scale_cpu_capacity(int cpu)
 {
        lx_emul_trace_and_stop(__func__);
 }
-#endif
 
 
 void register_syscore_ops(struct syscore_ops * ops)
@@ -94,26 +80,6 @@ int drm_aperture_remove_conflicting_pci_framebuffers(struct pci_dev * pdev,
 }
 
 
-void release_firmware(const struct firmware * fw)
-{
-	lx_emul_trace(__func__);
-}
-
-
-int request_firmware(const struct firmware ** firmware_p,const char * name,struct device * device)
-{
-	lx_emul_trace(__func__);
-	return -1;
-}
-
-
-int request_firmware_direct(const struct firmware ** firmware_p,const char * name,struct device * device)
-{
-	lx_emul_trace(__func__);
-	return -1;
-}
-
-
 int register_pernet_subsys(struct pernet_operations * ops)
 {
 	lx_emul_trace(__func__);
@@ -121,8 +87,17 @@ int register_pernet_subsys(struct pernet_operations * ops)
 }
 
 
-int set_pages_uc(struct page * page,int numpages)
+int set_pages_uc(struct page * page, int numpages)
 {
+	printk("%s:%u called - num_pages=%d\n", __func__, __LINE__, numpages);
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+int set_pages_wb(struct page * page, int numpages)
+{
+	printk("%s:%u called - num_pages=%d\n", __func__, __LINE__, numpages);
 	lx_emul_trace(__func__);
 	return 0;
 }
@@ -735,6 +710,12 @@ void * vmap(struct page ** pages, unsigned int count, unsigned long flags, pgpro
 }
 
 
+void vunmap(const void * addr)
+{
+	lx_emul_trace(__func__);
+}
+
+
 int intel_hdcp_gsc_init(struct drm_i915_private * i915)
 {
 	lx_emul_trace(__func__);
@@ -761,7 +742,8 @@ struct intel_fbdev;
 extern struct intel_framebuffer * intel_fbdev_framebuffer(struct intel_fbdev * fbdev);
 struct intel_framebuffer * intel_fbdev_framebuffer(struct intel_fbdev * fbdev)
 {
-	lx_emul_trace_and_stop(__func__);
+	lx_emul_trace(__func__);
+	return NULL;
 }
 
 
@@ -775,4 +757,58 @@ void intel_fbdev_get_map(struct intel_fbdev * fbdev,struct iosys_map * map)
 void dump_page(const struct page * page,const char * reason)
 {
 	printk("page %px dumped because: %s\n", page, reason ? : "unknown");
+}
+
+
+void __srcu_read_unlock(struct srcu_struct * ssp, int idx)
+{
+	lx_emul_trace(__func__);
+}
+
+
+void synchronize_rcu(void)
+{
+	lx_emul_trace(__func__);
+}
+
+
+void memunmap(void * addr)
+{
+	lx_emul_trace(__func__);
+}
+
+
+void finish_rcuwait(struct rcuwait * w)
+{
+	lx_emul_trace(__func__);
+}
+
+
+long strnlen_user(const char __user * str,long count)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+int param_get_ulong(char *buffer, const struct kernel_param *kp)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+int param_set_ulong(const char *val, const struct kernel_param *kp)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void print_rt_stats(struct seq_file *m, int cpu)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void print_dl_stats(struct seq_file *m, int cpu)
+{
+	lx_emul_trace_and_stop(__func__);
 }

@@ -73,6 +73,8 @@ proc display_config { } {
   |         + start intel_fb | caps: 1000 | ram: 60M
   |           + binary pc_intel_fb
   |           + config | ld_verbose: yes | width: 1280 | height: 1024
+  |             + vfs
+  |               + dir firmware | + tar pc_display_firmware.tar
   |             + report | connectory: yes
   |           + route
   |             + any-service | + parent }
@@ -418,7 +420,7 @@ proc gpu_config { } {
 	set return_gpu ""
 
 	append return_gpu {
-+ start gpu | caps: 2000 | ram: 40M } [priority_drivers] {
++ start gpu | caps: 2000 | ram: 90M } [priority_drivers] {
   + binary intel_gpu
   + provides
   | + service Gpu
@@ -631,6 +633,7 @@ build {
 	app/acpica
 	app/pci_decode
 	app/block_tester
+	lib/pc_intel_xe
 }
 
 create_boot_directory
@@ -646,7 +649,8 @@ import_from_depot [depot_user]/src/init \
                   [depot_user]/src/report_rom \
                   [depot_user]/src/dynamic_rom \
                   [depot_user]/src/nano3d \
-                  [depot_user]/src/log_core
+                  [depot_user]/src/log_core \
+                  [depot_user]/raw/pc_display_firmware
 
 if {$use_gpu_client} {
 	import_from_depot [depot_user]/pkg/glmark2

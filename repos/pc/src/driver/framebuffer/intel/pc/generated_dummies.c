@@ -81,14 +81,6 @@ void __seq_puts(struct seq_file * m,const char * s)
 }
 
 
-#include <linux/srcu.h>
-
-void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/pid.h>
 
 pid_t __task_pid_nr_ns(struct task_struct * task,enum pid_type type,struct pid_namespace * ns)
@@ -434,22 +426,6 @@ void emergency_restart(void)
 #include <linux/capability.h>
 
 bool file_ns_capable(const struct file * file,struct user_namespace * ns,int cap)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/rcuwait.h>
-
-void finish_rcuwait(struct rcuwait * w)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/mm.h>
-
-bool folio_mark_dirty(struct folio * folio)
 {
 	lx_emul_trace_and_stop(__func__);
 }
@@ -1558,14 +1534,6 @@ long __sched io_schedule_timeout(long timeout)
 }
 
 
-#include <linux/fs.h>
-
-void iput(struct inode * inode)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/irq_work.h>
 
 bool irq_work_queue_on(struct irq_work * work,int cpu)
@@ -1657,14 +1625,6 @@ void memcpy_toio(volatile void __iomem * to,const void * from,size_t n)
 #include <asm-generic/logic_io.h>
 
 void memset_io(volatile void __iomem * a,int b,size_t c)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/io.h>
-
-void memunmap(void * addr)
 {
 	lx_emul_trace_and_stop(__func__);
 }
@@ -2006,13 +1966,6 @@ bool set_page_dirty(struct page * page)
 }
 
 
-extern int set_pages_wb(struct page * page,int numpages);
-int set_pages_wb(struct page * page,int numpages)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 extern void set_rq_offline(struct rq * rq);
 void set_rq_offline(struct rq * rq)
 {
@@ -2114,14 +2067,6 @@ bool static_key_initialized;
 int suppress_printk;
 
 
-#include <linux/rcupdate.h>
-
-void synchronize_rcu(void)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/sysctl.h>
 
 const int sysctl_vals[] = {};
@@ -2138,14 +2083,6 @@ int task_work_add(struct task_struct * task,struct callback_head * work,enum tas
 #include <linux/task_work.h>
 
 struct callback_head * task_work_cancel_func(struct task_struct * task,task_work_func_t func)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/mm.h>
-
-void unmap_mapping_range(struct address_space * mapping,loff_t const holebegin,loff_t const holelen,int even_cows)
 {
 	lx_emul_trace_and_stop(__func__);
 }
@@ -2176,14 +2113,6 @@ bool video_is_primary_device(struct device * dev)
 #include <linux/vmalloc.h>
 
 void * vmap_pfn(unsigned long * pfns,unsigned int count,pgprot_t prot)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/vmalloc.h>
-
-void vunmap(const void * addr)
 {
 	lx_emul_trace_and_stop(__func__);
 }

@@ -430,6 +430,12 @@ struct Sculpt::Fb_config
 		_manual_attr.generate(g);
 
 		g.node("report", [&] { g.attribute("connectors", "yes"); });
+		g.node("vfs", [&] { g.node("dir", [&] {
+			g.attribute("name", "firmware");
+			g.node("tar", [&] {
+				g.attribute("name", "pc_display_firmware.tar");
+			});
+		}); });
 
 		_gen_merge_node(g);
 

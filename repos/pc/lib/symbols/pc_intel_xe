@@ -1,0 +1,30 @@
+__default_kernel_pte_mask D 0
+dummy_irq_chip D 0
+guid_index D 0
+guid_null D 0
+jiffies D 0
+jiffies_64 D 0
+kmalloc_caches D 0
+lx_xe_get_brightness T
+lx_xe_set_brightness T
+mem_type_is_vram T
+random_kmalloc_seed D 0
+system_percpu_wq D 0
+system_unbound_wq D 0
+system_wq D 0
+ttm_bo_mmap_obj T
+ttm_bo_vm_close T
+ttm_bo_vm_open T
+ttm_bo_vmap T
+ttm_device_fini T
+ttm_device_init T
+uuid_index D 0
+uuid_null D 0
+xe_hw_fence_module_exit T
+xe_hw_fence_module_init T
+xe_modparam D 0
+xe_pm_module_init T
+xe_register_pci_driver T
+xe_sched_job_module_exit T
+xe_sched_job_module_init T
+xe_unregister_pci_driver T

@@ -22,8 +22,6 @@ extern "C" {
 /* fix for wait_for_completion_timeout where the __sched include is missing */
 #include <linux/sched/debug.h>
 
-struct intel_dp;
-
 void * intel_io_mem_map(unsigned long offset, unsigned long size);
 
 #include "lx_i915.h"
@@ -33,6 +31,21 @@ unsigned short emul_intel_gmch_control_reg(void);
 enum { OPREGION_PSEUDO_PHYS_ADDR = 0xffffefff };
 
 unsigned long long emul_avail_ram(void);
+
+#ifndef __cplusplus
+#include <gt/intel_engine_types.h>
+#endif
+
+struct drm_i915_gem_object;
+struct i915_request;
+struct ttm_resource_manager;
+struct ttm_device;
+struct intel_gsc_uc;
+struct intel_guc_ct;
+struct intel_guc;
+struct intel_gt;
+struct intel_huc;
+struct affinity_context;
 
 #ifdef __cplusplus
 }

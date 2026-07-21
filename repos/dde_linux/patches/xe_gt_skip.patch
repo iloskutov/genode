@@ -1,0 +1,46 @@
+--- src/linux/drivers/gpu/drm/xe/xe_gt.c
++++ src/linux/drivers/gpu/drm/xe/xe_gt.c
+@@ -504,8 +504,11 @@
+ 		return -ETIMEDOUT;
+ 
+ 	err = xe_uc_init(&gt->uc);
+-	if (err)
++	if (err) {
++		printk("%s:%u --- err=%d -> 0\n", __func__, __LINE__, err);
++		err = 0;
+ 		goto err_force_wake;
++	}
+ 
+ 	xe_gt_topology_init(gt);
+ 	xe_gt_mcr_init(gt);
+@@ -604,6 +607,10 @@
+ 		}
+ 	}
+ 
++	printk("%s:%u ---- skip\n", __func__, __LINE__);
++	err = 0;
++	goto err_force_wake;
++
+ 	if (xe_gt_is_main_type(gt)) {
+ 		struct xe_tile *tile = gt_to_tile(gt);
+ 
+@@ -689,15 +696,19 @@
+ 
+ 	xe_force_wake_init_engines(gt, gt_to_fw(gt));
+ 
++#if 0
+ 	err = gt_init_with_all_forcewake(gt);
+ 	if (err)
+ 		return err;
++#endif
+ 
+ 	xe_gt_record_user_engines(gt);
+ 
++#if 0
+ 	err = xe_eu_stall_init(gt);
+ 	if (err)
+ 		return err;
++#endif
+ 
+ 	return 0;
+ }

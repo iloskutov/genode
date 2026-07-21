@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (C) 2022-2024 Genode Labs GmbH
+ * Copyright (C) 2022-2026 Genode Labs GmbH
  *
  * This file is distributed under the terms of the GNU General Public License
  * version 2.
@@ -16,17 +16,22 @@
 #include <capture_session/connection.h>
 #include <os/pixel_rgb888.h>
 #include <os/reporter.h>
+#include <os/vfs.h>
 #include <util/reconstructible.h>
 
 /* emulation includes */
 #include <lx_emul/init.h>
 #include <lx_emul/task.h>
 #include <lx_kit/env.h>
+#include <lx_kit/firmware.h>
 #include <lx_kit/init.h>
 
 /* local includes */
 extern "C" {
+
 #include "lx_i915.h"
+
+void lx_emul_module_params();
 }
 
 
@@ -36,7 +41,107 @@ extern struct task_struct * lx_user_task;
 namespace Framebuffer {
 	using namespace Genode;
 	struct Driver;
+	struct Vfs_request_handler;
 }
+
+
+struct Framebuffer::Vfs_request_handler : Lx_kit::Firmware_request_handler
+{
+	Env  &_env;
+	Heap &_heap;
+
+	Attached_rom_dataspace _config_rom { _env, "config" };
+
+	Vfs::Root _vfs_root = _config_rom.node().with_sub_node("vfs",
+		[&] (Node const &config) -> Vfs::Root {
+			return { _env, _heap, config }; },
+		[&] () -> Vfs::Root {
+			warning("VFS not configured, firmware loading non-functional");
+			return { _env, _heap, Node() }; } );
+
+	static size_t query_file_length(Vfs::Root &root, char const *file_path)
+	{
+		using DS = Vfs::Directory_service;
+		using SR = DS::Stat_result;
+
+		size_t length = 0;
+
+		DS::Stat stat { };
+		if (root.fs().stat(file_path, stat) == SR::STAT_OK) {
+			length = (size_t)stat.size;
+		}
+
+		return length;
+	}
+
+	static size_t read_file(Vfs::Root              &root,
+	                        char             const *file_path,
+	                        Byte_range_ptr   const &dst)
+	{
+		try {
+			Readonly_file ro_file(Directory(root), file_path);
+			return ro_file.read(dst);
+		} catch (...) { }
+
+		return 0;
+	}
+
+	Signal_handler<Vfs_request_handler> _handler;
+
+	void _handle_request()
+	{
+		using Fw_path = Genode::String<128>;
+		using namespace Lx_kit;
+
+		Firmware_request *request_ptr = firmware_get_request();
+		if (!request_ptr)
+			return;
+
+		Firmware_request &request = *request_ptr;
+
+		request.success = false;
+
+		switch (request.state) {
+		case Firmware_request::State::PROBING:
+		{
+			Fw_path const path { "/firmware/", request.name };
+
+			size_t const length = query_file_length(_vfs_root, path.string());
+
+			request.fw_len  = length;
+			request.success = length != 0;
+
+			request.submit_response();
+			break;
+		}
+		case Firmware_request::State::REQUESTING:
+		{
+			Fw_path const path { "/firmware/", request.name };
+
+			size_t const bytes = read_file(_vfs_root, path.string(),
+			                               Byte_range_ptr { request.dst,
+			                                                request.dst_len });
+
+			request.success = bytes == request.dst_len;
+
+			request.submit_response();
+			break;
+		}
+		case Firmware_request::State::INVALID:             break;
+		case Firmware_request::State::PROBING_COMPLETE:    break;
+		case Firmware_request::State::REQUESTING_COMPLETE: break;
+		}
+	}
+
+	Vfs_request_handler(Genode::Env &env, Genode::Heap &heap)
+	:
+		_env     { env },
+		_heap    { heap },
+		_handler { env.ep(), *this, &Vfs_request_handler::_handle_request } { }
+
+	void submit_request() override {
+		_handler.local_submit(); }
+};
 
 
 struct Framebuffer::Driver
@@ -269,6 +374,8 @@ struct Framebuffer::Driver
 		Lx_kit::env().scheduler.execute();
 	}
 
+	Vfs_request_handler _vfs_handler { env, heap };
+
 	Driver(Env &env) : env(env)
 	{
 		Lx_kit::initialize(env, scheduler_handler);
@@ -297,11 +404,15 @@ struct Framebuffer::Driver
 		config.sigh(config_handler);
 
 		config_read();
+
+		Lx_kit::firmware_establish_handler(_vfs_handler);
 	}
 
 	void start()
 	{
 		log("--- Intel framebuffer driver started ---");
+
+		lx_emul_module_params();
 
 		lx_emul_start_kernel(nullptr);
 	}
@@ -354,7 +465,7 @@ struct Framebuffer::Driver
 		if (_framebuffer_memory)
 			return _framebuffer_memory;
 
-		enum : unsigned { DEFAULT_FB_MEMORY = 64u << 20, };
+		enum : unsigned { DEFAULT_FB_MEMORY = 192u << 20, };
 		auto framebuffer_memory = Number_of_bytes(DEFAULT_FB_MEMORY);
 		if (config.valid())
 			framebuffer_memory =

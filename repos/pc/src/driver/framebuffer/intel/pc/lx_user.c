@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (C) 2022-2025 Genode Labs GmbH
+ * Copyright (C) 2022-2026 Genode Labs GmbH
  *
  * This file is distributed under the terms of the GNU General Public License
  * version 2.
@@ -13,26 +13,27 @@
 
 #define KBUILD_MODNAME "genode_i915_user_driver"
 
-#include <linux/backlight.h>
 #include <linux/fb.h> /* struct fb_info */
 #include <linux/sched/task.h>
+#include <linux/vmalloc.h>
 
+#include <drm/drm_cache.h>
 #include <drm/drm_client.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_file.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_gem.h>
+#include <drm/drm_print.h>
+#include <drm/drm_gem_ttm_helper.h>
+#include <drm/ttm/ttm_tt.h>
 #include <drm_crtc_internal.h>
 
-#include "i915_drv.h"
-#include "display/intel_backlight.h"
 #include "display/intel_display_core.h"
-#include "display/intel_display_device.h"
-#include "display/intel_display_types.h"
-#include "display/intel_fb_pin.h"
 
 #include "lx_emul.h"
+#include "lx_brightness.h"
 
-extern unsigned int intel_fb_min_alignment(const struct drm_framebuffer *fb);
 
-enum { MAX_BRIGHTNESS  = 100, INVALID_BRIGHTNESS   = MAX_BRIGHTNESS + 1 };
 enum { MAX_CONNECTORS  =  32, CONNECTOR_ID_MIRROR  = MAX_CONNECTORS - 1 };
 enum { CAPTURE_RATE_MS =  10, ATTEMPTS_BEFORE_STOP = 7 };
 
@@ -46,8 +47,8 @@ static struct state {
 	struct drm_mode_create_dumb  fb_dumb;
 	struct drm_mode_fb_cmd2      fb_cmd;
 	struct drm_framebuffer     * fbs;
-	struct i915_vma            * vma;
-	unsigned long                vma_flags;
+	struct page               ** pages;
+	unsigned                     pagecount;
 	unsigned                     rotate;
 	bool                         flip;
 	uint8_t                      mode_id;
@@ -60,8 +61,9 @@ static struct state {
 static int user_register_fb(struct drm_client_dev   const * const dev,
                             struct fb_info                * const info,
                             struct drm_framebuffer        * const fb,
-                            struct i915_vma              ** vma,
-                            unsigned long                 * vma_flags,
+                            struct drm_mode_fb_cmd2       * const fb_cmd,
+                            struct page                 *** const pages,
+                            unsigned                      * const page_count,
                             unsigned width_mm, unsigned height_mm,
                             unsigned rotate, bool flip);
 
@@ -213,38 +215,35 @@ static void mirror_heuristic(struct drm_device const * const dev,
 }
 
 
-static void set_brightness(unsigned brightness, struct drm_connector * connector)
+static void set_brightness(struct drm_client_dev const * const dev,
+                           struct drm_mode_fb_cmd2     * const dumb_fb,
+                           struct drm_connector * connector,
+                           unsigned brightness)
 {
-	struct intel_connector * intel_c = to_intel_connector(connector);
-	if (intel_c)
-		intel_backlight_set_acpi(intel_c->base.state, brightness, MAX_BRIGHTNESS);
+	struct drm_mode_map_dumb  const data_mmap = { .handle = dumb_fb->handles[0] };
+	struct drm_gem_object   * const gem       = drm_gem_object_lookup(dev->file,
+	                                                                  data_mmap.handle);
+
+	if (gem && !gem->filp) {
+		lx_xe_set_brightness(brightness, connector);
+	} else
+		lx_i915_set_brightness(brightness, connector);
 }
 
 
-static unsigned get_brightness(struct drm_connector * const connector,
+static unsigned get_brightness(struct drm_client_dev const * const dev,
+                               struct drm_mode_fb_cmd2     * const dumb_fb,
+                               struct drm_connector * const connector,
                                unsigned const brightness_error)
 {
-	struct intel_connector * intel_c = NULL;
-	struct intel_panel     * panel   = NULL;
-	unsigned ret;
+	struct drm_mode_map_dumb  const data_mmap = { .handle = dumb_fb->handles[0] };
+	struct drm_gem_object   * const gem       = drm_gem_object_lookup(dev->file,
+	                                                                  data_mmap.handle);
 
-	if (!connector)
-		return brightness_error;
-
-	intel_c = to_intel_connector(connector);
-	if (!intel_c)
-		return brightness_error;
-
-	panel = &intel_c->panel;
-
-	if (!panel || !panel->backlight.device || !panel->backlight.device->ops ||
-	    !panel->backlight.device->ops->get_brightness)
-		return brightness_error;
-
-	ret = panel->backlight.device->ops->get_brightness(panel->backlight.device);
-
-	/* in percentage */
-	return ret * MAX_BRIGHTNESS / panel->backlight.device->props.max_brightness;
+	if (gem && !gem->filp)
+		return lx_xe_get_brightness(connector, brightness_error);
+	else
+		return lx_i915_get_brightness(connector, brightness_error);
 }
 
 
@@ -301,7 +300,11 @@ static void destroy_fb_and_capture(struct drm_client_dev       * const dev,
                                    struct drm_connector  const * const connector,
                                    struct state                * const state)
 {
-	struct fb_info   info   = {};
+	struct fb_info                  info      = { };
+	struct drm_mode_fb_cmd2 * const dumb_fb   = &state->fb_cmd;
+	struct drm_mode_map_dumb  const data_mmap = { .handle = dumb_fb->handles[0] };
+	struct drm_gem_object   * const gem       = drm_gem_object_lookup(dev->file,
+	                                                                  data_mmap.handle);
 
 	info.var.bits_per_pixel = 32;
 	info.node               = connector->index;
@@ -309,12 +312,11 @@ static void destroy_fb_and_capture(struct drm_client_dev       * const dev,
 
 	kernel_register_fb(&info, 0, 0, 0, false);
 
-	if (state->vma) {
-		intel_fb_unpin_vma(state->vma,
-		                   state->vma_flags);
-
-		state->vma       = NULL;
-		state->vma_flags = 0;
+	if (state->pages) {
+		if (gem->filp)
+			drm_gem_put_pages(gem, state->pages, true, true);
+		state->pages = NULL;
+		state->pagecount = 0;
 	}
 
 	state->enabled   = false;
@@ -681,8 +683,10 @@ static void reconfigure(struct drm_client_dev * const dev)
 		/* set brightness */
 		if (conf_mode.brightness <= MAX_BRIGHTNESS) {
 			drm_modeset_lock(&dev->dev->mode_config.connection_mutex, NULL);
-			set_brightness(conf_mode.enabled ? conf_mode.brightness : 0,
-			               connector);
+			set_brightness(dev,
+			               &states[CONNECTOR_ID_MIRROR].fb_cmd,
+			               connector,
+			               conf_mode.enabled ? conf_mode.brightness : 0);
 			drm_modeset_unlock(&dev->dev->mode_config.connection_mutex);
 		}
 
@@ -716,8 +720,8 @@ static void reconfigure(struct drm_client_dev * const dev)
 			unsigned width_mm  = mode->width_mm  ? : connector->display_info.width_mm;
 			unsigned height_mm = mode->height_mm ? : connector->display_info.height_mm;
 
-			int err = user_register_fb(dev, &fb_info, state->fbs,
-			                           &state->vma, &state->vma_flags,
+			int err = user_register_fb(dev, &fb_info, state->fbs, &state->fb_cmd,
+			                           &state->pages, &state->pagecount,
 			                           width_mm, height_mm,
 			                           state->rotate, state->flip);
 
@@ -736,7 +740,8 @@ static void reconfigure(struct drm_client_dev * const dev)
 		struct state * state_mirror = &states[CONNECTOR_ID_MIRROR];
 
 		user_register_fb(dev, &mirror.info, state_mirror->fbs,
-		                 &state_mirror->vma, &state_mirror->vma_flags,
+		                 &state_mirror->fb_cmd, &state_mirror->pages,
+		                 &state_mirror->pagecount,
 		                 mirror.width_mm, mirror.height_mm,
 		                 state_mirror->rotate, state_mirror->flip);
 	}
@@ -825,6 +830,11 @@ void lx_emul_i915_wakeup(unsigned const connector_id)
 
 static int update_content(void *)
 {
+	while(!dev_client || !dev_client->dev) {
+		printk("%s: no device registered -> sleeping\n", __func__);
+		msleep(5000);
+	}
+
 	while (true) {
 		struct drm_connector_list_iter   conn_iter;
 		struct drm_connector           * connector  = NULL;
@@ -872,8 +882,11 @@ static int update_content(void *)
 
 			states[index].unchanged = 0;
 
-			if (states[index].fbs)
+			if (states[index].fbs) {
+				drm_clflush_pages(states[index].pages,
+				                  states[index].pagecount);
 				mark_framebuffer_dirty(states[index].fbs);
+			}
 		}
 		drm_connector_list_iter_end(&conn_iter);
 
@@ -942,7 +955,7 @@ static void _report_connectors(void * genode_data, bool const discrete)
 
 		char display_name[16] = { 0 };
 
-		unsigned brightness;
+		unsigned brightness = 0;
 
 		/* read configuration for connector */
 		lx_emul_i915_connector_config(connector->name, &conf_mode);
@@ -953,7 +966,10 @@ static void _report_connectors(void * genode_data, bool const discrete)
 		if (connector->edid_blob_ptr)
 			display_name_from_edid(connector->edid_blob_ptr, display_name, sizeof(display_name));
 
-		brightness = get_brightness(connector, INVALID_BRIGHTNESS);
+		brightness = get_brightness(dev_client,
+		                            &states[CONNECTOR_ID_MIRROR].fb_cmd,
+		                            connector, INVALID_BRIGHTNESS);
+
 		if (!brightness && conf_mode.brightness)
 			brightness = conf_mode.brightness;
 
@@ -989,7 +1005,6 @@ void lx_emul_i915_iterate_modes(void * lx_data, void * genode_data)
 	struct drm_display_mode * mode        = NULL;
 	struct drm_display_mode * prev_mode   = NULL;
 	unsigned                  mode_id     = 0;
-	bool                      quirk_inuse = false;
 	struct state            * state       = &states[connector->index];
 	struct genode_mode        conf_mode   = { };
 
@@ -997,9 +1012,6 @@ void lx_emul_i915_iterate_modes(void * lx_data, void * genode_data)
 		return;
 
 	lx_emul_i915_connector_config(connector->name, &conf_mode);
-
-	/* no fb and conf_mode.enabled is a temporary inconsistent state */
-	quirk_inuse = conf_mode.enabled && !state->fbs;
 
 	list_for_each_entry(mode, &connector->modes, head) {
 		bool skip = false;
@@ -1030,24 +1042,13 @@ void lx_emul_i915_iterate_modes(void * lx_data, void * genode_data)
 				.height_mm = mode->height_mm,
 				.preferred = mode->type & (DRM_MODE_TYPE_PREFERRED |
 				                           DRM_MODE_TYPE_DEFAULT),
-				.inuse     = !quirk_inuse && state->mode_id == mode_id && state->enabled,
+				.inuse     = state->mode_id == mode_id && state->enabled,
 				.mirror    = state->mirrored,
 				.hz        = drm_mode_vrefresh(mode),
 				.id        = mode_id,
 				.enabled   = !max_mode ||
 				             !conf_smaller_max_mode(&conf_mode, mode)
 			};
-
-			/*
-			 * Report first usable mode as used mode in the quirk state to
-			 * avoid sending a mode list with no used mode at all, which
-			 * external configuration components may trigger to disable the
-			 * connector.
-			 */
-			if (quirk_inuse && config_report.enabled) {
-				config_report.inuse = true;
-				quirk_inuse         = false;
-			}
 
 			/* skip similar mode and if it is not the used one */
 			if (skip && !config_report.inuse)
@@ -1243,93 +1244,67 @@ static int register_drm_client(struct drm_device * const dev)
 static int user_register_fb(struct drm_client_dev const * const dev,
                             struct fb_info              * const info,
                             struct drm_framebuffer      * const fb,
-                            struct i915_vma            ** const vma,
-                            unsigned long               * const vma_flags,
+                            struct drm_mode_fb_cmd2     * const dumb_fb,
+                            struct page               *** const pages,
+                            unsigned                    * const pagecount,
                             unsigned                      const width_mm,
                             unsigned                      const height_mm,
                             unsigned                      const rotate,
                             bool                          const flip)
 {
-	intel_wakeref_t wakeref;
+	pgprot_t      const prot   = { };
+	unsigned long const flags  = 0;
+	int                 result = -EINVAL;
 
-	int                        result   = -EINVAL;
-	struct i915_gtt_view const view     = { .type = I915_GTT_VIEW_NORMAL };
-	void   __iomem            *vaddr    = NULL;
-	struct drm_i915_private   *dev_priv = to_i915(dev->dev);
+	struct drm_mode_map_dumb const data_mmap = { .handle = dumb_fb->handles[0] };
 
-	if (!info || !fb || !dev_priv || !vma || !vma_flags) {
-		printk("%s:%u error setting up info and fb\n", __func__, __LINE__);
-		return -ENODEV;
+	struct drm_gem_object * const gem = drm_gem_object_lookup(dev->file,
+	                                                          data_mmap.handle);
+	if (!info || !fb || !gem || !pages) {
+		printk("%s:%u error setting up info and fb %px %px %px %px\n",
+		       __func__, __LINE__, info, fb, gem, pages);
+		return -EINVAL;
 	}
 
-	if (*vma) {
-		intel_fb_unpin_vma(*vma, *vma_flags);
+	if (!gem->filp) {
+		struct ttm_buffer_object *bo = drm_gem_ttm_of_gem(gem);
 
-		*vma       = NULL;
-		*vma_flags = 0;
-	}
+		if (bo && bo->ttm)
+			*pages = bo->ttm->pages;
+		else
+			*pages = NULL;
+	} else
+		*pages = drm_gem_get_pages(gem);
 
-	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
+	if (!*pages || IS_ERR(*pages)) {
+		result = PTR_ERR(*pages);
+		*pages = NULL;
+		*pagecount = 0;
 
-	/* Pin the GGTT vma for our access via info->screen_base.
-	 * This also validates that any existing fb inherited from the
-	 * BIOS is suitable for own access.
-	 */
-	unsigned min_alignment = intel_fb_min_alignment(fb);
-
-	*vma = intel_fb_pin_to_ggtt(fb, &view, min_alignment, 0, 0, false, vma_flags);
-
-	if (IS_ERR(*vma)) {
-		intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-
-		result = PTR_ERR(*vma);
-
-		printk("%s:%u error setting vma %d\n", __func__, __LINE__, result);
-
-		*vma = NULL;
-		*vma_flags = 0;
+		printk("%s drm_gem_get_pages failed\n", __func__);
 
 		return result;
 	}
 
-	if (!i915_vma_is_map_and_fenceable(*vma)) {
-		/* on Meteorlake ignore the check, since mappable_end is not set.  */
-		if (i915_vm_to_ggtt((*vma)->vm)->mappable_end) {
-			printk("%s: framebuffer not mappable in aperture -> destroying\n",
-			       (info && info->par) ? (char *)info->par : "unknown");
+	void * vaddr = vmap(*pages, gem->size >> PAGE_SHIFT, flags, prot);
+	*pagecount = gem->size >> PAGE_SHIFT;
 
-			intel_fb_unpin_vma(*vma, *vma_flags);
+	if (!vaddr) {
+		if (gem->filp)
+			drm_gem_put_pages(gem, *pages, false, false);
+		*pages = NULL;
+		*pagecount = 0;
+		result = -EINVAL;
 
-			*vma       = NULL;
-			*vma_flags = 0;
-
-			return -ENOSPC;
-		}
-	}
-
-	vaddr = i915_vma_pin_iomap(*vma);
-
-	if (IS_ERR(vaddr)) {
-		intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-
-		result = PTR_ERR(vaddr);
-		printk("%s:%u error pin iomap %d\n", __func__, __LINE__, result);
-
-		intel_fb_unpin_vma(*vma, *vma_flags);
-
-		*vma       = NULL;
-		*vma_flags = 0;
+		printk("%s vmap failed\n", __func__);
 
 		return result;
 	}
-
 	/* fill framebuffer info for kernel_register_fb */
 	info->screen_base        = vaddr;
-	info->screen_size        = (*vma)->size;
+	info->screen_size        = gem->size;
 	info->fix.line_length    = fb->pitches[0];
 	info->var.bits_per_pixel = drm_format_info_bpp(fb->format, 0);
-
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
 
 	kernel_register_fb(info, width_mm, height_mm, rotate, flip);
 
@@ -1416,40 +1391,4 @@ void intel_fbdev_setup(struct intel_display *display)
 		return;
 
 	register_drm_client(drm);
-}
-
-
-void intel_fbdev_fini(struct drm_i915_private *dev_priv)
-{
-	lx_emul_trace(__func__);
-}
-
-
-void intel_fbdev_initial_config_async(struct drm_device *dev)
-{
-	lx_emul_trace(__func__);
-}
-
-
-void intel_fbdev_unregister(struct drm_i915_private *dev_priv)
-{
-	lx_emul_trace(__func__);
-}
-
-
-void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous)
-{
-	lx_emul_trace(__func__);
-}
-
-
-void intel_fbdev_restore_mode(struct drm_device *dev)
-{
-	lx_emul_trace(__func__);
-}
-
-
-void intel_fbdev_output_poll_changed(struct drm_device *dev)
-{
-	lx_emul_trace(__func__);
 }

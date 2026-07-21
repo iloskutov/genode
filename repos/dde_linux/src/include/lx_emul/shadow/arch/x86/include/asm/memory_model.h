@@ -25,6 +25,8 @@
 #define page_to_phys(page)  ((dma_addr_t)page_to_pfn(page) << PAGE_SHIFT)
 #endif
 
+#define __pfn_to_phys(pfn) PFN_PHYS(pfn)
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* __ASM_MEMORY_MODEL_H */

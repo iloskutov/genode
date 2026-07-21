@@ -25,7 +25,8 @@ if {$use_fb_controller} {
 import_from_depot [depot_user]/src/fs_rom \
                   [depot_user]/src/vfs \
                   [depot_user]/src/vfs_import \
-                  [depot_user]/src/report_rom
+                  [depot_user]/src/report_rom \
+                  [depot_user]/raw/pc_display_firmware
 
 set build_components {
 	core lib/ld init timer
@@ -34,6 +35,7 @@ set build_components {
 	app/pci_decode
 	driver/framebuffer/intel/pc
 	test/framebuffer
+	lib/pc_intel_xe
 }
 
 append_if $use_usb build_components { driver/usb_host }
@@ -207,6 +209,8 @@ append config {
         |     + config
         |       | ld_verbose:       yes
         |       | apply_on_hotplug: } $apply_on_hotplug {
+        |       + vfs
+        |         + dir firmware | + tar pc_display_firmware.tar
         |       + report | connectors: yes
         |       + merge mirror
         |         .

@@ -1,0 +1,36 @@
+--- src/linux/drivers/dma-buf/dma-resv.c
++++ src/linux/drivers/dma-buf/dma-resv.c
+@@ -295,6 +295,11 @@
+ 
+ 	dma_resv_assert_held(obj);
+ 
++	if (!obj || !fence) {
++		printk("%s:%u -- obj=%px fence=%px\n", __func__, __LINE__, obj, fence);
++		return;
++	}
++
+ 	/* Drivers should not add containers here, instead add each fence
+ 	 * individually.
+ 	 */
+@@ -347,6 +352,11 @@
+ 	struct dma_resv_list *list;
+ 	unsigned int i;
+ 
++	if (!obj || !replacement) {
++		printk("%s:%u -- obj=%px replacement=%px\n", __func__, __LINE__, obj, replacement);
++		return;
++	}
++
+ 	dma_resv_assert_held(obj);
+ 
+ 	list = dma_resv_fences_list(obj);
+@@ -377,6 +387,9 @@
+ /* Walk to the next not signaled fence and grab a reference to it */
+ static void dma_resv_iter_walk_unlocked(struct dma_resv_iter *cursor)
+ {
++	if (!cursor)
++		printk("%s:%u\n", __func__, __LINE__);
++
+ 	if (!cursor->fences)
+ 		return;
+ 

@@ -1,0 +1,1 @@
+../../../src/driver/framebuffer/intel/pc/lx_brightness.h

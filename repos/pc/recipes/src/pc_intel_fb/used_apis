@@ -8,3 +8,4 @@ pc_linux
 platform_session
 report_session
 timer_session
+vfs

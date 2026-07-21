@@ -39,6 +39,14 @@ struct dma_fence_ops const i915_fence_ops;
 pteval_t __default_kernel_pte_mask __read_mostly = ~0;
 
 
+unsigned int __read_mostly cpu_khz;	/* TSC clocks / usec, not used here */
+EXPORT_SYMBOL(cpu_khz);
+
+bool         mirrored_kernelcore;
+unsigned int sysctl_sched_features;
+unsigned int sysctl_sched_base_slice = 700000ULL;
+unsigned int sysctl_sched_tunable_scaling = 1;
+
 void si_meminfo(struct sysinfo * val)
 {
 	unsigned long long const ram_pages = emul_avail_ram() / PAGE_SIZE;
@@ -180,6 +188,14 @@ void folio_mark_accessed(struct folio *folio)
 }
 
 
+bool folio_mark_dirty(struct folio * folio)
+{
+	if (!folio_test_dirty(folio))
+		return !folio_test_set_dirty(folio);
+	return false;
+}
+
+
 void check_move_unevictable_folios(struct folio_batch *fbatch)
 {
 	lx_emul_trace(__func__);
@@ -201,6 +217,20 @@ void folio_undo_large_rmappable(struct folio *folio)
 void free_unref_page(struct page *page, unsigned int order)
 {
 	lx_emul_trace_and_stop(__func__);
+}
+
+
+void iput(struct inode * inode)
+{
+	if (!inode)
+		return;
+
+	if (atomic_read(&inode->i_count)
+	    && !atomic_dec_and_test(&inode->i_count))
+		return;
+
+	if (inode->free_inode)
+		inode->free_inode(inode);
 }
 
 
@@ -301,6 +331,19 @@ void __folio_batch_release(struct folio_batch *fbatch)
 }
 
 
+int dma_map_sgtable(struct device *dev, struct sg_table *sgt,
+                    enum dma_data_direction dir, unsigned long attrs)
+{
+	int nents;
+
+	nents = dma_map_sg_attrs(dev, sgt->sgl, sgt->orig_nents, dir, attrs);
+	if (nents < 0)
+		return nents;
+	sgt->nents = nents;
+	return 0;
+}
+
+
 void __fix_address
 sk_skb_reason_drop(struct sock *sk, struct sk_buff *skb, enum skb_drop_reason reason)
 {
@@ -311,4 +354,26 @@ sk_skb_reason_drop(struct sock *sk, struct sk_buff *skb, enum skb_drop_reason re
 		return;
 
 	printk("%s ---- LEAKING skb\n", __func__);
+}
+
+
+extern char **module_param_xe_force_probe(void);
+extern char **module_param_force_probe(void);
+
+
+void lx_emul_module_params(void)
+{
+#if 0
+	/* linux command line: xe.force_probe=7d51 i915.force_probe=!7d51 */
+
+	char ** force_probe_xe   = module_param_xe_force_probe();
+	char ** force_probe_i915 = module_param_force_probe();
+
+	/* XXX dynamically read out and/or make it configurable */
+	*force_probe_xe   = "7d51";
+	*force_probe_i915 = "!7d51";
+
+	printk("%s --- force_probe active, device xe=%s i915=%s\n",
+	       __func__, *force_probe_xe, *force_probe_i915);
+#endif
 }

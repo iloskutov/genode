@@ -1,7 +1,7 @@
 /*
  * \brief  Array defining order of Linux Kernel initcalls
  * \author Automatically generated file - do no edit
- * \date   2026-03-25
+ * \date   2026-07-13
  */
 
 #pragma once
@@ -266,7 +266,9 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_drm_core_init6",
 	"__initcall_drm_buddy_module_init6",
 	"__initcall_drm_display_helper_module_init6",
+	"__initcall_drm_sched_fence_slab_init6",
 	"__initcall_i915_init6",
+	"__initcall_xe_init6",
 	"__initcall_topology_sysfs_init6",
 	"__initcall_cacheinfo_sysfs_init6",
 	"__initcall_mei_init6",

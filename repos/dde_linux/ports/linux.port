@@ -29,11 +29,17 @@ PATCH_FILES := \
                i915_meteorlake.patch \
                i915_dsb.patch \
                i915_shmem_folio.patch \
-               i915_min_alignment.patch \
                audio_distinguish_irq.patch \
                audio_hda_bus_repsonse.patch \
                audio_hp_jack_event_sleep.patch \
                audio_sof_timeouts.patch \
-               evbug.patch
+               evbug.patch \
+               xe_dma_resv.patch \
+               xe_gt_skip.patch \
+               xe_vmap_contiguous.patch \
+               xe_sa.patch \
+               xe_generated.patch \
+               xe_restart.patch \
+               xe_vtd.patch
 
 PATCHES += $(addprefix patches/,$(PATCH_FILES))

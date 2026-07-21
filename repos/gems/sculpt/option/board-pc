@@ -71,13 +71,16 @@ option
   + managed | max_ram: 256M | max_caps: 5000 | disable: while_suspended
   + heartbeat | restart_after_skipped: 2
   + connect
-    + dma                | + child intel_gpu
-    + platform           | + child intel_gpu
-    + capture            | + child gui
-    + report             | + child report
-    + rom config         | + child model  | label: fb
-    + rom intel_opregion | + child report | label: platform/intel_opregion
-    + rm                 | + parent
+    + dma                         | + child intel_gpu
+    + platform                    | + child intel_gpu
+    + capture                     | + child gui
+    + report                      | + child report
+    + rom config                  | + child model  | label: fb
+    + rom intel_opregion          | + child report | label: platform/intel_opregion
+    + rom pc_intel_xe.lib.so      | + parent
+    + rom vfs.lib.so              | + parent
+    + rom pc_display_firmware.tar | + parent
+    + rm                          | + parent
 
 + child boot_fb | binary: boot_fb | ram: 8M | caps: 100 | priority: media | enabled: discover
   + connect

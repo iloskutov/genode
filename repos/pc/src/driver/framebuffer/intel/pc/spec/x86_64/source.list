@@ -31,6 +31,7 @@ drivers/gpu/drm/drm_atomic_uapi.c
 drivers/gpu/drm/drm_auth.c
 drivers/gpu/drm/drm_blend.c
 drivers/gpu/drm/drm_bridge.c
+drivers/gpu/drm/drm_buddy.c
 drivers/gpu/drm/drm_cache.c
 drivers/gpu/drm/drm_client.c
 drivers/gpu/drm/drm_client_event.c
@@ -45,6 +46,7 @@ drivers/gpu/drm/drm_drv.c
 drivers/gpu/drm/drm_dumb_buffers.c
 drivers/gpu/drm/drm_edid.c
 drivers/gpu/drm/drm_encoder.c
+drivers/gpu/drm/drm_exec.c
 drivers/gpu/drm/drm_fb_helper.c
 drivers/gpu/drm/drm_file.c
 drivers/gpu/drm/drm_fourcc.c
@@ -52,6 +54,7 @@ drivers/gpu/drm/drm_framebuffer.c
 drivers/gpu/drm/drm_gem.c
 drivers/gpu/drm/drm_gem_atomic_helper.c
 drivers/gpu/drm/drm_gem_framebuffer_helper.c
+drivers/gpu/drm/drm_gem_ttm_helper.c
 drivers/gpu/drm/drm_lease.c
 drivers/gpu/drm/drm_managed.c
 drivers/gpu/drm/drm_mipi_dsi.c
@@ -69,6 +72,7 @@ drivers/gpu/drm/drm_print.c
 drivers/gpu/drm/drm_probe_helper.c
 drivers/gpu/drm/drm_property.c
 drivers/gpu/drm/drm_rect.c
+drivers/gpu/drm/drm_suballoc.c
 drivers/gpu/drm/drm_syncobj.c
 drivers/gpu/drm/drm_sysfs.c
 drivers/gpu/drm/drm_vblank.c
@@ -253,12 +257,10 @@ drivers/gpu/drm/i915/soc/intel_gmch.c
 drivers/gpu/drm/i915/soc/intel_rom.c
 drivers/gpu/drm/i915/vlv_iosf_sb.c
 drivers/gpu/drm/i915/vlv_suspend.c
-drivers/gpu/drm/ttm/ttm_bo.c
-drivers/gpu/drm/ttm/ttm_device.c
-drivers/gpu/drm/ttm/ttm_pool.c
-drivers/gpu/drm/ttm/ttm_resource.c
-drivers/gpu/drm/ttm/ttm_sys_manager.c
-drivers/gpu/drm/ttm/ttm_tt.c
+drivers/gpu/drm/scheduler/sched_entity.c
+drivers/gpu/drm/scheduler/sched_fence.c
+drivers/gpu/drm/scheduler/sched_main.c
+drivers/gpu/drm/xe/xe_module.c
 drivers/i2c/algos/i2c-algo-bit.c
 drivers/i2c/i2c-boardinfo.c
 drivers/i2c/i2c-core-acpi.c

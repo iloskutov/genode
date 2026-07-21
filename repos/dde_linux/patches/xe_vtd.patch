@@ -1,0 +1,31 @@
+--- src/linux/drivers/gpu/drm/xe/display/ext/i915_utils.c
++++ src/linux/drivers/gpu/drm/xe/display/ext/i915_utils.c
+@@ -8,6 +8,9 @@
+ 
+ bool i915_vtd_active(struct drm_i915_private *i915)
+ {
++	if (!device_iommu_mapped(i915->drm.dev))
++		printk("%s:%u IO-MMU seems to be off - erratic behaviour ahead\n", __func__, __LINE__);
++
+ 	if (device_iommu_mapped(i915->drm.dev))
+ 		return true;
+ 
+--- src/linux/drivers/gpu/drm/xe/xe_gt.c
++++ src/linux/drivers/gpu/drm/xe/xe_gt.c
+@@ -670,6 +670,16 @@
+ 		xe_hw_fence_irq_init(&gt->fence_irq[i]);
+ 	}
+ 
++	/*
++	 * Tells driver that IOMMU, e.g. VT-d, is on, so that i915_vtd_active()
++	 * callers may apply their workarounds.
++	 *
++	 * The struct iommu_group is solely defined within iommu/iommu.c and
++	 * not public available. iommu/iommu.c is not used by our port, so adding
++	 * a dummy valid pointer is sufficient to get i915_vtd_active working.
++	 */
++	gt_to_xe(gt)->drm.dev->iommu_group = kzalloc(4096, GFP_KERNEL);
++
+ 	err = devm_add_action_or_reset(gt_to_xe(gt)->drm.dev, xe_gt_fini, gt);
+ 	if (err)
+ 		return err;

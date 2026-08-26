@@ -192,6 +192,7 @@ option
     + rom vfs.lib.so                | + parent
     + rom libc.lib.so               | + parent
     + rom libm.lib.so               | + parent
+    + rom libnl.lib.so              | + parent
     + rom vfs_jitterentropy.lib.so  | + parent
     + rom libssl1.lib.so            | + parent
     + rom wifi.lib.so               | + parent | label: pc_wifi.lib.so

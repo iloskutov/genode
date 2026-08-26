@@ -33,3 +33,28 @@ extern "C" char *getenv(const char *name)
 
 	return nullptr;
 }
+
+/*************
+ ** netdb.h **
+ *************/
+
+extern "C" {
+struct protoent;
+struct protoent *getprotobynumber (int __proto) { (void)__proto; return nullptr; }
+} /* extern "C" */
+
+
+/***********
+ ** libnl **
+ ***********/
+
+/*
+ * Silence undefined references that no longer get garbage collected
+ * due to libnl now being a shared library.
+ */
+extern "C" {
+struct nl_addr;
+void *nl_addr_get_binary_addr(struct nl_addr *addr) { return nullptr; }
+unsigned int nl_addr_get_len(struct nl_addr *addr) { return 0; }
+unsigned int nl_hash_any(const void *key, unsigned long length, unsigned int base) { return 0; }
+} /* extern "C" */

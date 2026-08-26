@@ -127,6 +127,11 @@ SRC_C += $(addprefix src/utils/, $(SRC_C_utils))
 INC_DIR += $(WS_CONTRIB_DIR)/src/utils
 CC_OPT  += -DCONFIG_ELOOP_POLL
 
+#
+# "import" locally implemented socket functions
+#
+CC_C_OPT += -Dpoll=libnl_poll
+
 vpath %.c  $(WS_CONTRIB_DIR)
 vpath %.c  $(WS_DIR)
 vpath %.cc $(WS_DIR)

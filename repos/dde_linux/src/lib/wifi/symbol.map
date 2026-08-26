@@ -1,20 +1,18 @@
 {
 	global:
 
-		/* needed by vfs_wlan */
-		*Lx_kit*initialize*;
-
-		/* initialize function */
+		/* initialize/rfkill/firmware/socketcall interface for wifi binary */
 		_*wifi_init*;
-		/* Wifi::Socket_call interface */
-		*Socket_call*;
-		/* Wifi::Socket_call instance */
-		socket_call;
-		/* rfkill interface */
 		_*Wifi*rfkill*;
 		_*wifi_kick_*;
 
 		_*Lx_kit*firmware*;
+
+		_*wifi_kick_socketcall*;
+
+		/* Wifi::Socket_call interface for libnl */
+		*Socket_call*;
+		socket_call;
 
 		/* interface for libnl/wpa_driver_nl82011 */
 		wifi_if*;

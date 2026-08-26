@@ -1,0 +1,9 @@
+l2_packet_deinit T
+l2_packet_get_ip_addr T
+l2_packet_get_own_addr T
+l2_packet_init T
+l2_packet_init_bridge T
+l2_packet_notify_auth_start T
+l2_packet_send T
+l2_packet_set_packet_filter T
+wpa_drivers D 16

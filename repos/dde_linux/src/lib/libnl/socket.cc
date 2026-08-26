@@ -155,7 +155,7 @@ extern "C" {
  ** sys/socket.h **
  ******************/
 
-int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+int libnl_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s) {
@@ -174,7 +174,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 }
 
 
-int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
+int libnl_getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s) {
@@ -193,8 +193,8 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 }
 
 
-ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
-                 struct sockaddr *src_addr, socklen_t *addrlen)
+ssize_t libnl_recvfrom(int sockfd, void *buf, size_t len, int flags,
+                       struct sockaddr *src_addr, socklen_t *addrlen)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s) {
@@ -228,7 +228,7 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
 }
 
 
-ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
+ssize_t libnl_recvmsg(int sockfd, struct msghdr *msg, int flags)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s) {
@@ -279,13 +279,7 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
 }
 
 
-ssize_t send(int sockfd, const void *buf, size_t len, int flags)
-{
-	return sendto(sockfd, buf, len, flags, 0, 0);
-}
-
-
-ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
+ssize_t libnl_sendmsg(int sockfd, const struct msghdr *msg, int flags)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s) {
@@ -333,8 +327,8 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
 }
 
 
-ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
-               const struct sockaddr *dest_addr, socklen_t addrlen)
+ssize_t libnl_sendto(int sockfd, const void *buf, size_t len, int flags,
+                     const struct sockaddr *dest_addr, socklen_t addrlen)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s)
@@ -358,6 +352,12 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
 	}
 
 	return err;
+}
+
+
+ssize_t libnl_send(int sockfd, const void *buf, size_t len, int flags)
+{
+	return libnl_sendto(sockfd, buf, len, flags, 0, 0);
 }
 
 
@@ -396,8 +396,8 @@ static Sockopt_name sockopt_name(int const level, int const in)
 }
 
 
-int setsockopt(int sockfd, int level, int optname, const void *optval,
-               socklen_t optlen)
+int libnl_setsockopt(int sockfd, int level, int optname, const void *optval,
+                     socklen_t optlen)
 {
 	Socket *s = Socket_registry::find(sockfd);
 	if (!s)
@@ -420,7 +420,7 @@ int setsockopt(int sockfd, int level, int optname, const void *optval,
 }
 
 
-int socket(int domain, int type, int protocol)
+int libnl_socket(int domain, int type, int protocol)
 {
 	/* FIXME domain, type, protocol values */
 	Socket *s = socket_call.socket(domain, type, protocol);
@@ -436,7 +436,7 @@ int socket(int domain, int type, int protocol)
  ** unistd.h **
  **************/
 
-int close(int fd)
+int libnl_close(int fd)
 {
 	Socket *s = Socket_registry::find(fd);
 	if (!s)
@@ -458,7 +458,7 @@ int close(int fd)
  ** fnctl.h **
  *************/
 
-int fcntl(int fd, int cmd, ... /* arg */ )
+int libnl_fcntl(int fd, int cmd, ... /* arg */ )
 {
 	Socket *s = Socket_registry::find(fd);
 	if (!s)
@@ -507,7 +507,7 @@ static bool special_fd(int fd)
 }
 
 
-int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+int libnl_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 {
 	Poll_socket_fd sockets[Wifi::MAX_POLL_SOCKETS];
 

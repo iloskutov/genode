@@ -43,16 +43,6 @@ extern "C" int  lx_emul_rfkill_get_any(void);
 extern "C" void lx_emul_rfkill_switch_all(int blocked);
 
 
-bool _wifi_get_rfkill(void)
-{
-	/*
-	 * It is safe to call this from non EP threads as we
-	 * only query a variable.
-	 */
-	return lx_emul_rfkill_get_any();
-}
-
-
 struct Rfkill_helper
 {
 	Wifi::Rfkill_notification_handler &_handler;
@@ -71,7 +61,11 @@ struct Rfkill_helper
 
 bool Wifi::rfkill_blocked(void)
 {
-	return _wifi_get_rfkill();
+	/*
+	 * It is safe to call this from non EP threads as we
+	 * only query a variable.
+	 */
+	return lx_emul_rfkill_get_any();
 }
 
 

@@ -30,7 +30,10 @@ MIRROR_FROM_DDE_LINUX_DIR := $(DDE_LINUX_LIB_MK) \
                              src/driver/wifi \
                              lib/import/import-libnl_include.mk \
                              lib/import/import-libnl.mk \
+                             lib/symbols/libnl \
                              lib/symbols/wifi \
+                             lib/symbols/wpa_driver_nl80211 \
+                             lib/symbols/wpa_supplicant \
                              include/wifi \
                              $(shell cd $(DDE_LINUX_REP_DIR); find src/lib/libnl -type f) \
                              $(shell cd $(DDE_LINUX_REP_DIR); find src/lib/wifi -type f) \

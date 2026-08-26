@@ -34,6 +34,22 @@ CC_OPT += -DCONFIG_DRIVER_NL80211
 CC_OPT += -DCONFIG_LIBNL20
 CC_OPT += -D_LINUX_SOCKET_H
 
+#
+# "import" locally implemented socket functions
+#
+CC_C_OPT += -Dbind=libnl_bind
+CC_C_OPT += -Dclose=libnl_close
+CC_C_OPT += -Dfcntl=libnl_fcntl
+CC_C_OPT += -Dgetsockname=libnl_getsockname
+CC_C_OPT += -Dpoll=libnl_poll
+CC_C_OPT += -Drecvfrom=libnl_recvfrom
+CC_C_OPT += -Drecvmsg=libnl_recvmsg
+CC_C_OPT += -Dsend=libnl_send
+CC_C_OPT += -Dsendmsg=libnl_sendmsg
+CC_C_OPT += -Dsendto=libnl_sendto
+CC_C_OPT += -Dsetsockopt=libnl_setsockopt
+CC_C_OPT += -Dsocket=libnl_socket
+
 vpath %.c  $(WS_CONTRIB_DIR)
 vpath %.cc $(LIB_DIR)
 

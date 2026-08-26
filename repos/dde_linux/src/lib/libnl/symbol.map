@@ -1,0 +1,76 @@
+{
+	global:
+
+		genl_connect;
+		genl_ctrl_alloc_cache;
+		genl_ctrl_resolve;
+		genl_ctrl_search;
+		genl_family_get_maxattr;
+		genl_family_put;
+		genlmsg_attrdata;
+		genlmsg_attrlen;
+		genlmsg_put;
+		if_indextoname;
+		if_nametoindex;
+		nl_cache_free;
+		nl_cb_alloc;
+		nl_cb_clone;
+		nl_cb_err;
+		nl_cb_get;
+		nl_cb_put;
+		nl_cb_set;
+		nl_connect;
+		nl_geterror;
+		nl_recvmsgs;
+		nl_send_auto_complete;
+		nl_set_wpa_ctrl_fd;
+		nl_socket_add_membership;
+		nl_socket_alloc;
+		nl_socket_alloc_cb;
+		nl_socket_free;
+		nl_socket_get_cb;
+		nl_socket_get_fd;
+		nl_socket_set_buffer_size;
+		nl_socket_set_nonblocking;
+		nl_wait_for_ack;
+		nla_data;
+		nla_find;
+		nla_get_flag;
+		nla_get_string;
+		nla_get_u16;
+		nla_get_u32;
+		nla_get_u64;
+		nla_get_u8;
+		nla_len;
+		nla_nest_end;
+		nla_nest_start;
+		nla_next;
+		nla_ok;
+		nla_parse;
+		nla_parse_nested;
+		nla_put;
+		nla_put_flag;
+		nla_put_nested;
+		nla_put_string;
+		nla_put_u16;
+		nla_put_u32;
+		nla_put_u64;
+		nla_put_u8;
+		nla_total_size;
+		nla_type;
+		nlmsg_alloc;
+		nlmsg_alloc_simple;
+		nlmsg_alloc_size;
+		nlmsg_append;
+		nlmsg_data;
+		nlmsg_find_attr;
+		nlmsg_free;
+		nlmsg_hdr;
+		nlmsg_total_size;
+
+		libnl_*;
+
+	local:
+
+		*;
+};

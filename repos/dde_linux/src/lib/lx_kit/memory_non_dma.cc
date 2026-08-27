@@ -54,7 +54,7 @@ Lx_kit::Mem_allocator::alloc_buffer(size_t size)
 	for (size_t sz = 0; sz < buffer.size(); sz += 4096) {
 		touch_read((unsigned char const volatile*)(buffer.virt_addr() + sz)); }
 
-	_virt_to_dma.insert(buffer.virt_addr(), buffer);
-	_dma_to_virt.insert(buffer.bus_addr(),  buffer);
+	_map._virt_to_dma.insert(buffer.virt_addr(), buffer);
+	_map._dma_to_virt.insert(buffer.bus_addr(),  buffer);
 	return buffer;
 }

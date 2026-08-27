@@ -14,6 +14,7 @@
 
 /* Genode includes */
 #include <base/log.h>
+#include <util/touch.h>
 
 /* local includes */
 #include <lx_kit/memory.h>
@@ -21,40 +22,27 @@
 #include <lx_kit/byte_range.h>
 
 
+/**********************************
+ ** Mem_allocator implementation **
+ **********************************/
+
 void Lx_kit::Mem_allocator::free_buffer(void * addr)
 {
-	Buffer * buffer = nullptr;
+	using Query_addr = Buffer_info::Query_addr;
 
-	_virt_to_dma.apply(Buffer_info::Query_addr(addr),
-	                   [&] (Buffer_info const &info) {
-		buffer = &info.buffer;
-	});
+	_map._virt_to_dma.apply(Query_addr(addr),
+		[&] (Buffer_info const &info) {
+			void const * virt_addr = (void const *)info.buffer.virt_addr();
+			void const * bus_addr  = (void const *)info.buffer.bus_addr();
 
-	if (!buffer) {
-		warning(__func__, ": no memory buffer for addr: ", addr, " found");
-		return;
-	}
+			_map._virt_to_dma.remove(Query_addr(virt_addr));
+			_map._dma_to_virt.remove(Query_addr(bus_addr));
 
-	void const * virt_addr = (void const *)buffer->virt_addr();
-	void const * bus_addr  = (void const *)buffer->bus_addr();
-
-	_virt_to_dma.remove(Buffer_info::Query_addr(virt_addr));
-	_dma_to_virt.remove(Buffer_info::Query_addr(bus_addr));
-
-	destroy(_heap, buffer);
-}
-
-
-Genode::Dataspace_capability Lx_kit::Mem_allocator::attached_dataspace_cap(void * addr)
-{
-	Genode::Dataspace_capability ret { };
-
-	_virt_to_dma.apply(Buffer_info::Query_addr(addr),
-	                   [&] (Buffer_info const &info) {
-		ret = info.buffer.cap();
-	});
-
-	return ret;
+			destroy(_heap, &info.buffer);
+		},
+		[&] {
+			warning(__func__, ": no memory buffer for addr: ", addr, " found");
+		});
 }
 
 
@@ -120,47 +108,6 @@ void * Lx_kit::Mem_allocator::alloc(size_t const size, size_t const align_bytes,
 }
 
 
-Genode::addr_t Lx_kit::Mem_allocator::dma_addr(void * addr)
-{
-	addr_t ret = 0UL;
-
-	_virt_to_dma.apply(Buffer_info::Query_addr(addr),
-	                   [&] (Buffer_info const &info) {
-		addr_t const offset = (addr_t)addr - info.buffer.virt_addr();
-		ret = info.buffer.bus_addr() + offset;
-	});
-
-	return ret;
-}
-
-
-Genode::addr_t Lx_kit::Mem_allocator::virt_addr(void * bus_addr)
-{
-	addr_t ret = 0UL;
-
-	_dma_to_virt.apply(Buffer_info::Query_addr(bus_addr),
-	                   [&] (Buffer_info const &info) {
-		addr_t const offset = (addr_t)bus_addr - info.buffer.bus_addr();
-		ret = info.buffer.virt_addr() + offset;
-	});
-
-	return ret;
-}
-
-
-Genode::addr_t Lx_kit::Mem_allocator::virt_region_start(void * virt_addr)
-{
-	addr_t ret = 0UL;
-
-	_virt_to_dma.apply(Buffer_info::Query_addr(virt_addr),
-	                   [&] (Buffer_info const &info) {
-		ret = info.buffer.virt_addr();
-	});
-
-	return ret;
-}
-
-
 bool Lx_kit::Mem_allocator::free(const void * ptr)
 {
 	if (!_mem.valid_addr((addr_t)ptr))
@@ -190,5 +137,97 @@ Genode::size_t Lx_kit::Mem_allocator::size(const void * ptr)
 Lx_kit::Mem_allocator::Mem_allocator(Genode::Env     &env,
                                      Heap            &heap,
                                      Dma::Connection &dma,
+                                     Mem_map         &map,
                                      Cache            cache_attr)
-: _env(env), _heap(heap), _dma(dma), _cache_attr(cache_attr) {}
+: _env(env), _heap(heap), _dma(dma), _map(map), _cache_attr(cache_attr) {}
+
+
+/*********************************
+ ** Mem_external implementation **
+ *********************************/
+
+void Lx_kit::Mem_external::add(void *bus_addr, size_t size, void *virt_addr,
+                               void (*new_range)(void const *, unsigned long))
+{
+	size = align_addr(size, AT_PAGE);
+
+	Buffer &buffer =
+		*new (_heap) Buffer((size_t)bus_addr, size, (size_t)virt_addr);
+
+	/* map eager by touching all pages once */
+	for (size_t sz = 0; sz < size; sz += 4096) {
+		touch_read((unsigned char const volatile*)(buffer.virt_addr() + sz)); }
+
+	_map._virt_to_dma.insert(buffer.virt_addr(), buffer);
+	_map._dma_to_virt.insert(buffer.bus_addr(),  buffer);
+
+	new_range(virt_addr, size);
+}
+
+
+void Lx_kit::Mem_external::remove(void * addr,
+                                  void (*del_range)(void const *, unsigned long))
+{
+	using Query_addr = Mem_allocator::Buffer_info::Query_addr;
+
+	_map._virt_to_dma.apply(Query_addr(addr),
+		[&] (Mem_allocator::Buffer_info const &info) {
+
+			void const * virt_addr = (void const *)info.buffer.virt_addr();
+			void const * bus_addr  = (void const *)info.buffer.bus_addr();
+
+			del_range(virt_addr, info.buffer.size());
+
+			_map._virt_to_dma.remove(Query_addr(virt_addr));
+			_map._dma_to_virt.remove(Query_addr(bus_addr));
+
+			destroy(_heap, &info.buffer);
+		},
+		[&] {
+			warning(__func__, ": no memory buffer for addr: ", addr, " found");
+		});
+}
+
+
+/****************************
+ ** Mem_map implementation **
+ ****************************/
+
+Genode::Dataspace_capability Lx_kit::Mem_map::attached_dataspace_cap(void * addr)
+{
+	return _virt_to_dma.apply(Buffer_info::Query_addr(addr),
+		[&] (Buffer_info const &info) { return info.buffer.cap(); },
+		[] { return Genode::Dataspace_capability(); });
+}
+
+
+Genode::addr_t Lx_kit::Mem_map::dma_addr(void * addr)
+{
+	return _virt_to_dma.apply(Buffer_info::Query_addr(addr),
+		[&] (Buffer_info const &info) {
+			addr_t const offset = (addr_t)addr - info.buffer.virt_addr();
+			return info.buffer.bus_addr() + offset;
+		},
+		[] { return 0UL; });
+}
+
+
+Genode::addr_t Lx_kit::Mem_map::virt_addr(void * bus_addr)
+{
+	return _dma_to_virt.apply(Buffer_info::Query_addr(bus_addr),
+		[&] (Buffer_info const &info) {
+			addr_t const offset = (addr_t)bus_addr - info.buffer.bus_addr();
+			return info.buffer.virt_addr() + offset;
+		},
+		[] { return 0UL; });
+}
+
+
+Genode::addr_t Lx_kit::Mem_map::virt_region_start(void * virt_addr)
+{
+	return _virt_to_dma.apply(Buffer_info::Query_addr(virt_addr),
+		[&] (Buffer_info const &info) {
+			return info.buffer.virt_addr();
+		},
+		[] { return 0UL; });
+}

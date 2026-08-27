@@ -94,6 +94,19 @@ typedef struct genode_shared_dataspace *
 typedef void
 	(*genode_shared_dataspace_free_t) (struct genode_shared_dataspace * ds);
 
+/**
+ * Callback definition to register externally managed memory
+ */
+typedef void
+	(*genode_external_memory_register_t) (void *bus_addr, unsigned long size,
+	                                      void *virt_addr);
+
+/**
+ * Callback definition to unregister externally managed memory
+ */
+typedef void
+	(*genode_external_memory_unregister_t) (void *virt_addr);
+
 struct genode_const_buffer
 {
 	char const   *start;

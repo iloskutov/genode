@@ -92,11 +92,14 @@ class Lx_kit::Map : Noncopyable
 		}
 
 		template <typename QUERY, typename FN>
-		void apply(QUERY const &query, FN const &fn)
+		auto apply(QUERY const &query, FN const &fn, auto const &missing_fn)
+		-> typename Trait::Functor<decltype(&FN::operator())>::Return_type
 		{
 			Item *item_ptr = _lookup(query);
 			if (item_ptr)
-				fn(item_ptr->value);
+				return fn(item_ptr->value);
+			else
+				return missing_fn();
 		}
 };
 

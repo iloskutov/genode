@@ -48,8 +48,10 @@ struct Lx_kit::Env
 	Platform::Connection platform        { env };
 	Dma::Connection      dma             { env };
 	Timer::Connection    timer           { env };
-	Mem_allocator        memory          { env, heap, dma, CACHED   };
-	Mem_allocator        uncached_memory { env, heap, dma, UNCACHED };
+	Mem_map              memory_map      { heap };
+	Mem_allocator        memory          { env, heap, dma, memory_map, CACHED };
+	Mem_allocator        uncached_memory { env, heap, dma, memory_map, UNCACHED };
+	Mem_external         external_memory { heap, memory_map };
 	Scheduler            scheduler       { env.ep() };
 	Device_list          devices         { env.ep(), heap, platform };
 	Lx_kit::Timeout      timeout         { timer, scheduler };

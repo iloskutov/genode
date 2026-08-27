@@ -78,9 +78,7 @@ struct page *lx_emul_associated_page(void const *virt)
 {
 	Lx_emul::Page_info::Query_virt_addr query { (addr_t)virt };
 
-	struct page *page_ptr = nullptr;
-	page_registry().apply(query, [&] (Lx_emul::Page_info const &page_info) {
-		page_ptr = page_info.page_ptr; });
-
-	return page_ptr;
+	return page_registry().apply(query,
+		[&] (Lx_emul::Page_info const &page_info) { return page_info.page_ptr; },
+		[] { return nullptr; });
 }

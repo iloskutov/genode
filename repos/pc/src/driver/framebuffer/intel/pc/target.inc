@@ -21,7 +21,6 @@ SRC_C   += lx_emul.c
 SRC_C   += $(notdir $(wildcard $(REL_PRG_DIR)/generated_dummies.c))
 SRC_C   += lx_user.c
 SRC_C   += gem.c
-SRC_C   += xe_migrate.c
 SRC_C   += intel_gt.c
 SRC_C   += lx_emul_firmware.c
 SRC_C   += lx_emul/common_dummies.c
@@ -48,7 +47,6 @@ INC_DIR    += $(LX_SRC_DIR)/drivers/gpu/drm
 # contrib/linux/src/linux/drivers/gpu/drm/xe/Makefile
 #
 CC_OPT_drivers/gpu/drm/xe/xe_module += -I$(LX_SRC_DIR)/drivers/gpu/drm/xe
-CC_OPT_xe_migrate                   += -I$(LX_SRC_DIR)/drivers/gpu/drm/xe
 
 #
 # The generated dummies file pulls in functions without header

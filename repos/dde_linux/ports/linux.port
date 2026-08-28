@@ -34,12 +34,8 @@ PATCH_FILES := \
                audio_hp_jack_event_sleep.patch \
                audio_sof_timeouts.patch \
                evbug.patch \
-               xe_dma_resv.patch \
-               xe_gt_skip.patch \
                xe_vmap_contiguous.patch \
-               xe_sa.patch \
                xe_generated.patch \
-               xe_restart.patch \
                xe_vtd.patch
 
 PATCHES += $(addprefix patches/,$(PATCH_FILES))

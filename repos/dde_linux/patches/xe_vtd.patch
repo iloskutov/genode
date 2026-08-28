@@ -12,7 +12,7 @@
  
 --- src/linux/drivers/gpu/drm/xe/xe_gt.c
 +++ src/linux/drivers/gpu/drm/xe/xe_gt.c
-@@ -670,6 +670,16 @@
+@@ -670,6 +670,17 @@
  		xe_hw_fence_irq_init(&gt->fence_irq[i]);
  	}
  
@@ -24,7 +24,8 @@
 +	 * not public available. iommu/iommu.c is not used by our port, so adding
 +	 * a dummy valid pointer is sufficient to get i915_vtd_active working.
 +	 */
-+	gt_to_xe(gt)->drm.dev->iommu_group = kzalloc(4096, GFP_KERNEL);
++	if (!gt_to_xe(gt)->drm.dev->iommu_group)
++		gt_to_xe(gt)->drm.dev->iommu_group = kzalloc(4096, GFP_KERNEL);
 +
  	err = devm_add_action_or_reset(gt_to_xe(gt)->drm.dev, xe_gt_fini, gt);
  	if (err)

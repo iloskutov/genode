@@ -278,6 +278,7 @@ drivers/video/fbdev/core/fbcmap.c
 drivers/video/hdmi.c
 drivers/video/nomodeset.c
 kernel/async.c
+kernel/irq_work.c
 kernel/irq/chip.c
 kernel/irq/devres.c
 kernel/irq/handle.c

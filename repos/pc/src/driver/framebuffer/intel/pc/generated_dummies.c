@@ -1534,30 +1534,6 @@ long __sched io_schedule_timeout(long timeout)
 }
 
 
-#include <linux/irq_work.h>
-
-bool irq_work_queue_on(struct irq_work * work,int cpu)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/irq_work.h>
-
-void irq_work_sync(struct irq_work * work)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/irq_work.h>
-
-void irq_work_tick(void)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/property.h>
 
 bool is_software_node(const struct fwnode_handle * fwnode)

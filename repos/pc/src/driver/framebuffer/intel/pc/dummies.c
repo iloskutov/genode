@@ -103,10 +103,9 @@ int set_pages_wb(struct page * page, int numpages)
 }
 
 
-bool irq_work_queue(struct irq_work * work)
+void __smp_call_single_queue(int cpu, struct llist_node *node)
 {
 	lx_emul_trace(__func__);
-	return false;
 }
 
 

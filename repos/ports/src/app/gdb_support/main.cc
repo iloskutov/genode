@@ -115,7 +115,7 @@ struct Main
 			if (_debug_dir.directory_exists(policy_label))
 				return;
 
-			_debug_dir.create_sub_directory(policy_label);
+			_debug_dir.create_sub_directory(policy_label, { });
 
 			Directory component_dir { _debug_dir, policy_label };
 

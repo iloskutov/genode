@@ -4,8 +4,6 @@
 # \date   2014-05-14
 #
 
-SRC_CC += cpu/arm/cache.cc
-
 LIBS += timeout-arm
 
 include $(REP_DIR)/lib/mk/base-linux.mk

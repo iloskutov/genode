@@ -4,8 +4,6 @@
 # \date   2014-05-14
 #
 
-SRC_CC += cache.cc
-
 LIBS += timeout
 
 include $(REP_DIR)/lib/mk/base-linux.mk

@@ -8,6 +8,7 @@ include $(BASE_DIR)/lib/mk/base-common.inc
 
 LIBS += syscall-foc startup-foc
 
+SRC_CC += cache.cc
 SRC_CC += spin_lock.cc cap_map.cc
 SRC_CC += rpc_dispatch_loop.cc
 SRC_CC += thread.cc thread_bootstrap.cc thread_myself.cc utcb.cc

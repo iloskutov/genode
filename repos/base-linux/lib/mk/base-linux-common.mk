@@ -8,6 +8,7 @@ include $(BASE_DIR)/lib/mk/base-common.inc
 
 LIBS += syscall-linux
 
+SRC_CC += cache.cc
 SRC_CC += region_map_mmap.cc debug.cc
 SRC_CC += rpc_dispatch_loop.cc
 SRC_CC += thread_env.cc

@@ -8,6 +8,7 @@ include $(BASE_DIR)/lib/mk/base-common.inc
 
 LIBS += startup-pistachio syscall-pistachio
 
+SRC_CC += cache.cc
 SRC_CC += capability.cc capability_raw.cc
 SRC_CC += rpc_dispatch_loop.cc
 SRC_CC += thread.cc thread_myself.cc

@@ -132,7 +132,7 @@ SRC_CORE += $(notdir $(wildcard $(BASE_HW_DIR)/src/core/*.cc)) \
             version.inc target.inc include hw kernel
 
 # names of the lib/mk/ files to consider for inclusion in the src archive
-LIB_MK_FILES := base-common.inc base-hw-common.mk \
+LIB_MK_FILES := base-common.inc base-hw-common.inc base-hw-common.mk \
                 base.inc base-hw.inc base-hw.mk \
                 bootstrap-hw.inc bootstrap-hw-$(BOARD).inc bootstrap-hw-$(BOARD).mk \
                 core-hw.inc core-hw-$(BOARD).inc core-hw-$(BOARD).mk \

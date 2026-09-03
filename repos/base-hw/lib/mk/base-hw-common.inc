@@ -7,6 +7,7 @@
 
 include $(BASE_DIR)/lib/mk/base-common.inc
 
+SRC_CC += cache.cc
 SRC_CC += rpc_dispatch_loop.cc
 SRC_CC += thread.cc thread_myself.cc thread_bootstrap.cc
 SRC_CC += signal_transmitter.cc

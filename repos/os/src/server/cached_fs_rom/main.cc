@@ -20,6 +20,7 @@
 #include <base/session_label.h>
 #include <base/heap.h>
 #include <base/component.h>
+#include <cpu/cache.h>
 
 /* local session-requests utility */
 #include "session_requests.h"
@@ -201,8 +202,9 @@ struct Cached_fs_rom::Transfer final
 				_seek = _size;
 			} else {
 				size_t const n = min(packet.length(), (size_t)(_size - pkt_seek));
-				memcpy(_cached_rom._ram_ds.local_addr<char>()+pkt_seek,
-				       _fs.tx()->packet_content(packet), n);
+				void *dst = _cached_rom._ram_ds.local_addr<char>()+pkt_seek;
+				memcpy(dst, _fs.tx()->packet_content(packet), n);
+				cache_coherent((addr_t)dst, n);
 				_seek = pkt_seek+n;
 			}
 

@@ -23,6 +23,7 @@
 #include <base/session_label.h>
 #include <util/arg_string.h>
 #include <base/heap.h>
+#include <cpu/cache.h>
 
 
 /*****************
@@ -313,8 +314,9 @@ class Fs_rom::Rom_session_component : public  Rpc_object<Rom_session>
 				}
 
 				size_t const n = min(packet.length(), (size_t)(_file_size - _file_seek));
-				memcpy(_file_ds.local_addr<char>()+_file_seek,
-				       _fs.tx()->packet_content(packet), n);
+				void *dst = _file_ds.local_addr<char>()+_file_seek;
+				memcpy(dst, _fs.tx()->packet_content(packet), n);
+				cache_coherent((addr_t)dst, n);
 				_file_seek += n;
 				return;
 			}

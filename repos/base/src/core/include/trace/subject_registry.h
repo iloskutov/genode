@@ -25,6 +25,7 @@
 #include <base/trace/types.h>
 #include <base/env.h>
 #include <base/weak_ptr.h>
+#include <cpu/cache.h>
 #include <dataspace/client.h>
 
 /* base-internal include */
@@ -105,6 +106,8 @@ class Core::Trace::Subject
 							[&] (Local_rm::Attachment &to_range) -> Setup_result {
 								Genode::memcpy(to_range.ptr, from_range.ptr,
 								               num_bytes);
+								Genode::cache_coherent((addr_t)to_range.ptr,
+								                       num_bytes);
 								return Ok();
 							},
 							[&] (Attach_error e) -> Setup_result { return alloc_error(e); });

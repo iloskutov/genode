@@ -45,6 +45,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 		::File_system::Connection _fs;
 
+		using Packet_descriptor = ::File_system::Packet_descriptor;
+
 		bool _write_would_block = false;
 
 		using Handle_space = Id_space<::File_system::Node>;
@@ -52,17 +54,18 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		Handle_space _handle_space { };
 		Handle_space _watch_handle_space { };
 
+		enum class Queued_state { IDLE, QUEUED, ACK };
+
 		struct Handle_state
 		{
 			enum class Read_ready_state { IDLE, PENDING, READY };
 			Read_ready_state read_ready_state = Read_ready_state::IDLE;
 
-			enum class Queued_state { IDLE, QUEUED, ACK };
 			Queued_state queued_read_state = Queued_state::IDLE;
 			Queued_state queued_sync_state = Queued_state::IDLE;
 
-			::File_system::Packet_descriptor queued_read_packet { };
-			::File_system::Packet_descriptor queued_sync_packet { };
+			Packet_descriptor queued_read_packet { };
+			Packet_descriptor queued_sync_packet { };
 		};
 
 		Remote_io::Peer _peer { _env.deferred_wakeups(), *this };
@@ -78,7 +81,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		 * The caller is expected to check 'ready_to_submit' before calling
 		 * this function.
 		 */
-		void _submit_packet(::File_system::Packet_descriptor const &packet)
+		void _submit_packet(Packet_descriptor const &packet)
 		{
 			/*
 			 * The warning should never occur if the precondition above is
@@ -134,8 +137,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				return ::File_system::File_handle { id().value };
 			}
 
-			using Packet_descriptor = ::File_system::Packet_descriptor;
-
 			struct Handle_ack_result { bool release_packet; };
 
 			virtual Handle_ack_result handle_ack(Packet_descriptor const &packet) = 0;
@@ -168,6 +169,77 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		};
 
 		Constructible<Mkdir_op> _mkdir_op { };
+
+		template <typename RESULT, typename ERROR>
+		static RESULT _read(File_system &fs, ::File_system::File_handle const fh,
+		                    Queued_state      &queued_read_state,
+		                    Packet_descriptor &queued_read_packet,
+		                    At const at, Byte_range_ptr const &dst)
+		{
+			auto try_queue_read = [&]
+			{
+				if (queued_read_state != Queued_state::IDLE)
+					return ERROR::RETRY;
+
+				/* queue read into fs session */
+
+				::File_system::Session::Tx::Source &source = *fs._fs.tx();
+
+				/* if not ready to submit suggest retry */
+				if (!source.ready_to_submit())
+					return ERROR::RETRY;
+
+				size_t const max_packet_size = source.bulk_buffer_size() / 2;
+				size_t const clipped_count = min(max_packet_size, dst.num_bytes);
+
+				Packet_descriptor p;
+				try {
+					p = source.alloc_packet((size_t)clipped_count);
+				} catch (::File_system::Session::Tx::Source::Packet_alloc_failed) {
+					return ERROR::RETRY;
+				}
+
+				Packet_descriptor const packet(p, fh, Packet_descriptor::READ,
+				                               (size_t)clipped_count, at.pos);
+
+				queued_read_state = Queued_state::QUEUED;
+
+				/* pass packet to server side */
+				fs._submit_packet(packet);
+				return ERROR::RETRY;
+			};
+
+			if (queued_read_state == Queued_state::IDLE)
+				if (try_queue_read() == ERROR::DENIED)
+					return ERROR::DENIED;
+
+			if (queued_read_state != Queued_state::ACK)
+				return ERROR::RETRY; /* Queued_state::QUEUED */
+
+			::File_system::Session::Tx::Source &source = *fs._fs.tx();
+
+			/* obtain result packet descriptor with updated status info */
+			Packet_descriptor const packet = queued_read_packet;
+
+			RESULT result = ERROR::DENIED;
+
+			if (packet.succeeded()) {
+				if (packet.position() == at.pos) {
+					size_t const read_num_bytes = min(packet.length(), dst.num_bytes);
+					memcpy(dst.start, source.packet_content(packet), (size_t)read_num_bytes);
+					result = read_num_bytes;
+				} else {
+					result = ERROR::RETRY; /* drop response of discarded read */
+				}
+			}
+
+			queued_read_state  = Queued_state::IDLE;
+			queued_read_packet = Packet_descriptor();
+
+			source.release_packet(packet);
+
+			return result;
+		}
 
 		struct Fs_vfs_handle : Vfs_handle, private Open_fs_handle, private Handle_state
 		{
@@ -206,12 +278,12 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 				case Packet_descriptor::READ:
 					queued_read_packet = packet;
-					queued_read_state  = Handle_state::Queued_state::ACK;
+					queued_read_state  = Queued_state::ACK;
 					return { };
 
 				case Packet_descriptor::SYNC:
 					queued_sync_packet = packet;
-					queued_sync_state  = Handle_state::Queued_state::ACK;
+					queued_sync_state  = Queued_state::ACK;
 					return { };
 
 				case Packet_descriptor::CONTENT_CHANGED:
@@ -230,7 +302,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				_fs._handle_ack();
 
 				::File_system::Session::Tx::Source &source = *_fs._fs.tx();
-				using ::File_system::Packet_descriptor;
 
 				size_t const max_packet_size = source.bulk_buffer_size() / 2;
 				size_t const count = min(max_packet_size, src.num_bytes);
@@ -262,74 +333,14 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				return count;
 			}
 
-			Read_result _try_queue_read(At const at, Byte_range_ptr const &dst)
-			{
-				if (queued_read_state != Handle_state::Queued_state::IDLE)
-					return Read_error::RETRY;
-
-				/* queue read into fs session */
-
-				::File_system::Session::Tx::Source &source = *_fs._fs.tx();
-
-				/* if not ready to submit suggest retry */
-				if (!source.ready_to_submit())
-					return Read_error::RETRY;
-
-				size_t const max_packet_size = source.bulk_buffer_size() / 2;
-				size_t const clipped_count = min(max_packet_size, dst.num_bytes);
-
-				::File_system::Packet_descriptor p;
-				try {
-					p = source.alloc_packet((size_t)clipped_count);
-				} catch (::File_system::Session::Tx::Source::Packet_alloc_failed) {
-					return Read_error::RETRY;
-				}
-
-				::File_system::Packet_descriptor const
-					packet(p, file_handle(),
-					       ::File_system::Packet_descriptor::READ,
-					       (size_t)clipped_count, at.pos);
-
-				read_ready_state  = Handle_state::Read_ready_state::IDLE;
-				queued_read_state = Handle_state::Queued_state::QUEUED;
-
-				/* pass packet to server side */
-				_fs._submit_packet(packet);
-				return Read_error::RETRY;
-			}
-
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
-				if (queued_read_state == Handle_state::Queued_state::IDLE)
-					if (_try_queue_read(at, dst) == Read_error::DENIED)
-						return Read_error::DENIED;
+				if (queued_read_state == Queued_state::IDLE)
+					read_ready_state  = Handle_state::Read_ready_state::IDLE;
 
-				if (queued_read_state != Handle_state::Queued_state::ACK)
-					return Read_error::RETRY; /* Queued_state::QUEUED */
-
-				::File_system::Session::Tx::Source &source = *_fs._fs.tx();
-
-				/* obtain result packet descriptor with updated status info */
-				::File_system::Packet_descriptor const packet = queued_read_packet;
-
-				Read_result result = Read_error::DENIED;
-
-				if (packet.succeeded()) {
-					if (packet.position() == at.pos) {
-						size_t const read_num_bytes = min(packet.length(), dst.num_bytes);
-						memcpy(dst.start, source.packet_content(packet), (size_t)read_num_bytes);
-						result = read_num_bytes;
-					} else {
-						result = Read_error::RETRY; /* drop response of discarded read */
-					}
-				}
-
-				queued_read_state  = Handle_state::Queued_state::IDLE;
-				queued_read_packet = ::File_system::Packet_descriptor();
-
-				source.release_packet(packet);
-
-				return result;
+				return _read<Read_result, Read_error>(_fs, file_handle(),
+				                                      queued_read_state,
+				                                      queued_read_packet, at, dst);
 			}
 
 			bool read_ready() const override
@@ -344,7 +355,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 			Sync_result sync() override
 			{
-				if (queued_sync_state == Handle_state::Queued_state::IDLE) {
+				if (queued_sync_state == Queued_state::IDLE) {
 
 					::File_system::Session::Tx::Source &source = *_fs._fs.tx();
 
@@ -362,13 +373,13 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 						packet(p, file_handle(),
 						       ::File_system::Packet_descriptor::SYNC, 0, 0);
 
-					queued_sync_state = Handle_state::Queued_state::QUEUED;
+					queued_sync_state = Queued_state::QUEUED;
 
 					/* pass packet to server side */
 					_fs._submit_packet(packet);
 				}
 
-				if (queued_sync_state == Handle_state::Queued_state::ACK) {
+				if (queued_sync_state == Queued_state::ACK) {
 
 					/* obtain result packet descriptor */
 					::File_system::Packet_descriptor const
@@ -378,7 +389,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 					bool const ok = packet.succeeded();
 
-					queued_sync_state  = Handle_state::Queued_state::IDLE;
+					queued_sync_state  = Queued_state::IDLE;
 					queued_sync_packet = ::File_system::Packet_descriptor();
 
 					source.release_packet(packet);

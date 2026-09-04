@@ -175,7 +175,12 @@ extern "C" Genode::Vfs::File_system::Factory *vfs_file_system_factory(void)
 		{
 			_env = &env;
 			try {
-				return { *this, { *new (env.alloc()) Fs(env, parent_fs, node) } };
+				/*
+				 * Store in global accesor for querying the underlying
+				 * Gpu session later on, see 'vfs_gpu_connection()'.
+				 */
+				_fs = new (env.alloc()) Fs(env, parent_fs, node);
+				return { *this, { *_fs } };
 			}
 			catch (...) { error("could not create 'gpu_fs' "); }
 			return Error::DENIED;

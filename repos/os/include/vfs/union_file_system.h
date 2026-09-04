@@ -15,7 +15,6 @@
 #define _INCLUDE__VFS__UNION_FILE_SYSTEM_H_
 
 #include <base/registry.h>
-#include <vfs/vfs_handle.h>
 #include <vfs/env.h>
 
 namespace Genode::Vfs { class Union_file_system; }
@@ -76,28 +75,31 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			_children.for_each([&] (Child &c) { c.with_fs(fn); });
 		}
 
-		struct Dir_vfs_handle : Vfs_handle
+		struct Dir_channel : Vfs::Dir_channel
 		{
-			struct Child_handle_element;
+			struct Child_channel_element;
 
-			using Child_handles = Registry<Child_handle_element>;
+			using Child_channels = Registry<Child_channel_element>;
 
-			struct Child_handle_element : Child_handles::Element
+			struct Child_channel_element : Child_channels::Element
 			{
 				File_system &fs;
-				Vfs_handle  &handle;
-				Child_handle_element(Child_handles &handles, File_system &fs,
-				                     Vfs_handle &handle)
+				Vfs::Dir_channel &channel;
+
+				Child_channel_element(Child_channels &channels, File_system &fs,
+				                      Vfs::Dir_channel &channel)
 				:
-					Child_handles::Element(handles, *this), fs(fs), handle(handle)
+					Child_channels::Element(channels, *this), fs(fs), channel(channel)
 				{ }
 			};
 
 			Union_file_system &_fs;
 
+			Allocator &_alloc;
+
 			Absolute_path const _path;
 
-			Child_handles _child_handles { };
+			Child_channels _child_channels { };
 
 			Read_result _read_of_file_systems(At const at, Byte_range_ptr const &dst)
 			{
@@ -110,7 +112,7 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 
 				Read_result result = Read_eof(); /* if no fs matches 'index' */
 
-				_child_handles.for_each([&] (Child_handle_element const &e) {
+				_child_channels.for_each([&] (Child_channel_element const &e) {
 
 					if (done) return; /* skip through */
 
@@ -129,7 +131,7 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 						/* seek to file-system local index */
 						index = index - base;
 
-						result = e.handle.read(At { index*sizeof(Dirent) }, dst);
+						result = e.channel.read(At { index*sizeof(Dirent) }, dst);
 						done = true;
 					}
 
@@ -139,17 +141,19 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 				return result;
 			}
 
-			Dir_vfs_handle(Union_file_system &fs, Allocator &alloc, char const *path)
+			Dir_channel(Union_file_system &fs, Allocator &alloc, char const *path)
 			:
-				Vfs_handle(fs, alloc, 0), _fs(fs), _path(path)
+				_fs(fs), _alloc(alloc), _path(path)
 			{ }
 
-			~Dir_vfs_handle()
+			void destruct() override
 			{
-				_child_handles.for_each([&] (Child_handle_element &e) {
-					e.handle.close();
-					destroy(alloc(), &e);
+				_child_channels.for_each([&] (Child_channel_element &e) {
+					e.channel.destruct();
+					destroy(_alloc, &e);
 				});
+
+				destroy(_alloc, this);
 			}
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -159,9 +163,6 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 
 				return _read_of_file_systems(at, dst);
 			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return false; }
 		};
 
 		/**
@@ -352,93 +353,69 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			return result;
 		}
 
+		using Open_composite_dirs_result = Attempt<Ok, Opendir_error>;
+
 		/**
-		 * Call 'opendir()' on each file system and store handles in
+		 * Call 'opendir()' on each file system and store channels in
 		 * a registry.
 		 */
-		Opendir_result _open_composite_dirs(Dir_vfs_handle &dir_vfs_handle)
+		Open_composite_dirs_result _open_composite_dirs(Dir_channel &dir_channel)
 		{
 			auto quota_exceeded = [] (Opendir_result r)
 			{
-				return r == OPENDIR_ERR_OUT_OF_RAM || r == OPENDIR_ERR_OUT_OF_CAPS;
+				return r == Opendir_error::OUT_OF_RAM || r == Opendir_error::OUT_OF_CAPS;
 			};
 
-			Opendir_result result = OPENDIR_OK;
+			auto const &path = dir_channel._path.string();
+
+			Opendir_error error = Opendir_error::DENIED;
 			bool at_least_one_ok = false;
 
 			_for_each_fs([&] (Fs &fs) {
-				if (quota_exceeded(result))
+				if (quota_exceeded(error))
 					return;
 
-				Vfs_handle *child_handle_ptr = nullptr;
-				result = fs.opendir(dir_vfs_handle._path.string(),
-				                    &child_handle_ptr, dir_vfs_handle.alloc());
-				if (quota_exceeded(result))
-					return;
+				fs.opendir(path, dir_channel._alloc).with_result(
+					[&] (Vfs::Dir_channel &c) {
+						try {
+							new (dir_channel._alloc)
+								Dir_channel::Child_channel_element(
+									dir_channel._child_channels, fs, c);
+							at_least_one_ok = true;
+						}
+						catch (Out_of_ram)  { error = Opendir_error::OUT_OF_RAM;  }
+						catch (Out_of_caps) { error = Opendir_error::OUT_OF_CAPS; }
 
-				if (result == OPENDIR_OK && child_handle_ptr) {
-					at_least_one_ok = true;
-					try {
-						new (dir_vfs_handle.alloc())
-							Dir_vfs_handle::Child_handle_element(
-								dir_vfs_handle._child_handles, fs, *child_handle_ptr);
-					}
-					catch (Out_of_ram)  { result = OPENDIR_ERR_OUT_OF_RAM; }
-					catch (Out_of_caps) { result = OPENDIR_ERR_OUT_OF_CAPS; }
-
-					if (quota_exceeded(result))
-						child_handle_ptr->close();
-				}
+						if (quota_exceeded(error))
+							c.destruct();
+					},
+					[&] (Opendir_error e) { error = e; });
 			});
-			return at_least_one_ok ? OPENDIR_OK : result;
+
+			if (at_least_one_ok && !quota_exceeded(error))
+				return Ok();
+
+			return error;
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			if (_update_in_progress)
 				error("attempt to access dir '", path, "' during VFS update");
 
-			Opendir_result result = OPENDIR_OK;
+			Opendir_result result = Opendir_error::DENIED;
 
-			if (_top_dir(path)) {
-
-				/*
-				 * opendir with '/' (called from 'open_composite_dirs' returns handle
-				 * only, VFS root additionally calls 'open_composite_dirs' in order to
-				 * open its file systems
-				 */
-				Dir_vfs_handle *root_handle;
-				try {
-					root_handle = new (alloc) Dir_vfs_handle(*this, alloc, path);
-				}
-				catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-				catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
-
-				result = _open_composite_dirs(*root_handle);
-				if (result == OPENDIR_OK)
-					*out_handle = root_handle;
-				else
-					close(root_handle);
-
-				return result;
-			}
-
-			Dir_vfs_handle *dir_vfs_handle;
 			try {
-				dir_vfs_handle = new (alloc) Dir_vfs_handle(*this, alloc, path);
-			}
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+				Dir_channel &channel = *new (alloc) Dir_channel(*this, alloc, path);
 
-			result = _open_composite_dirs(*dir_vfs_handle);
-			if (result == OPENDIR_OK) {
-				*out_handle = dir_vfs_handle;
-			} else {
-				/* close the master handle and the rest will follow */
-				close(dir_vfs_handle);
+				return _open_composite_dirs(channel).convert<Opendir_result>(
+					[&] (Ok) -> Dir_channel & { return channel; },
+					[&] (Opendir_error e) {
+						channel.destruct();
+						return e; });
 			}
-			return result;
+			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 		}
 
 		Openlink_result openlink(char const *path, bool create,

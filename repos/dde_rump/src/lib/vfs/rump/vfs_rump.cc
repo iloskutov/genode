@@ -82,7 +82,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 		Vfs::Env  &_env;
 		Parent_fs &_parent_fs;
 
-		struct Rump_vfs_dir_handle;
+		struct Rump_dir_channel;
 		struct Rump_watch_handle;
 		using Rump_watch_handles = List<Rump_watch_handle>;
 		Rump_watch_handles _watchers { };
@@ -214,8 +214,18 @@ class Vfs_rump::File_system : public Vfs::File_system
 			}
 		};
 
-		struct Rump_vfs_dir_handle : Rump_vfs_handle
+		struct Rump_dir_channel : Vfs::Dir_channel
 		{
+			Allocator &_alloc;
+
+			struct Attr
+			{
+				Path path;
+				int  fd;
+			};
+
+			Attr const _attr;
+
 			Read_result _finish_read(char const *path,
 			                         struct ::dirent *dent, Dirent &vfs_dir)
 			{
@@ -255,15 +265,14 @@ class Vfs_rump::File_system : public Vfs::File_system
 				return sizeof(Dirent);
 			}
 
-			Rump_vfs_dir_handle(File_system &fs, Allocator &alloc, int flags, Attr attr)
+			Rump_dir_channel(Allocator &alloc, Attr attr)
 			:
-				Rump_vfs_handle(fs, alloc, flags, attr)
+				_alloc(alloc), _attr(attr)
 			{ }
 
-			~Rump_vfs_dir_handle() { rump_sys_close(attr.fd); }
+			~Rump_dir_channel() { rump_sys_close(_attr.fd); }
 
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return false; }
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -274,14 +283,14 @@ class Vfs_rump::File_system : public Vfs::File_system
 
 				Dirent *vfs_dir = (Dirent*)dst.start;
 
-				rump_sys_lseek(attr.fd, 0, SEEK_SET);
+				rump_sys_lseek(_attr.fd, 0, SEEK_SET);
 
 				int bytes;
 				unsigned fileno = 0;
 				char *buf  = _buffer();
 				struct ::dirent *dent = nullptr;
 				do {
-					bytes = rump_sys_getdents(attr.fd, buf, BUFFER_SIZE);
+					bytes = rump_sys_getdents(_attr.fd, buf, BUFFER_SIZE);
 					void *current, *end;
 					for (current = buf, end = &buf[bytes];
 					     current < end;
@@ -290,7 +299,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 						dent = (::dirent *)current;
 						if (strcmp(".", dent->d_name) && strcmp("..", dent->d_name)) {
 							if (fileno++ == index) {
-								Path newpath(dent->d_name, attr.path.base());
+								Path newpath(dent->d_name, _attr.path.base());
 								return _finish_read(newpath.base(), dent, *vfs_dir);
 							}
 						}
@@ -583,40 +592,39 @@ class Vfs_rump::File_system : public Vfs::File_system
 			}
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			if (strlen(path) == 0)
 				path = "/";
 
-			int fd = rump_sys_open(path, O_RDONLY | O_DIRECTORY);
-			if (fd == -1) switch (errno) {
-			case ENAMETOOLONG: return OPENDIR_ERR_NAME_TOO_LONG;
-			case EACCES:       return OPENDIR_ERR_PERMISSION_DENIED;
-			case ENOENT:       return OPENDIR_ERR_LOOKUP_FAILED;
-			case EEXIST:       return OPENDIR_ERR_NODE_ALREADY_EXISTS;
-			case ENOSPC:       return OPENDIR_ERR_NO_SPACE;
-			default:
-				error(__func__, ": unhandled rump error ", errno);
-				return OPENDIR_ERR_PERMISSION_DENIED;
+			int const fd = rump_sys_open(path, O_RDONLY | O_DIRECTORY);
+			if (fd == -1) {
+				switch (errno) {
+				default:
+					error(__func__, ": unhandled rump error ", errno);
+					[[fallthrough]];
+				case ENAMETOOLONG:
+				case EACCES:
+				case ENOENT:
+				case EEXIST:
+				case ENOSPC:
+					break;
+				}
+				return Opendir_error::DENIED;
 			}
 
+			Opendir_error error = Opendir_error::DENIED;
 			try {
-				Rump_vfs_dir_handle *h = new (alloc)
-					Rump_vfs_dir_handle(*this, alloc, 0777, {
-						.path          = { path },
-						.fd            = fd,
-						.new_dir_entry = false
-					});
-				*handle = h;
-				return OPENDIR_OK;
-			} catch (Out_of_ram) {
-				rump_sys_close(fd);
-				return OPENDIR_ERR_OUT_OF_RAM;
-			} catch (Out_of_caps) {
-				rump_sys_close(fd);
-				return OPENDIR_ERR_OUT_OF_CAPS;
+				return *new (alloc) Rump_dir_channel(alloc, { .path = { path },
+				                                              .fd   = fd });
 			}
+			catch (Out_of_ram)  { error = Opendir_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { error = Opendir_error::OUT_OF_CAPS; }
+
+			if (error != Opendir_error::DENIED)
+				rump_sys_close(fd);
+
+			return error;
 		}
 
 		Openlink_result openlink(char const *path, bool create,
@@ -663,12 +671,6 @@ class Vfs_rump::File_system : public Vfs::File_system
 				dynamic_cast<Rump_vfs_file_handle *>(vfs_handle))
 			{
 				_file_handles.remove(handle);
-				destroy(vfs_handle->alloc(), handle);
-			}
-			else
-			if (Rump_vfs_dir_handle *handle =
-				dynamic_cast<Rump_vfs_dir_handle *>(vfs_handle))
-			{
 				destroy(vfs_handle->alloc(), handle);
 			}
 			else

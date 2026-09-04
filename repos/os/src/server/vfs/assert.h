@@ -22,19 +22,14 @@ namespace File_system {
 
 	using namespace Genode::Vfs;
 
-	static inline void assert_opendir(Directory_service::Opendir_result r)
+	static inline void assert_opendir(Opendir_result const &r)
 	{
-		using Result = Directory_service::Opendir_result;
-		switch (r) {
-		case Result::OPENDIR_ERR_LOOKUP_FAILED:       throw Lookup_failed();
-		case Result::OPENDIR_ERR_NAME_TOO_LONG:       throw Invalid_name();
-		case Result::OPENDIR_ERR_NODE_ALREADY_EXISTS: throw Node_already_exists();
-		case Result::OPENDIR_ERR_NO_SPACE:            throw No_space();
-		case Result::OPENDIR_ERR_OUT_OF_RAM:          throw Out_of_ram();
-		case Result::OPENDIR_ERR_OUT_OF_CAPS:         throw Out_of_caps();
-		case Result::OPENDIR_ERR_PERMISSION_DENIED:   throw Permission_denied();
-		case Result::OPENDIR_OK: break;
-		}
+		r.with_error([&] (Opendir_error e) { switch (e) {
+		case Opendir_error::DENIED:      throw Lookup_failed();
+		case Opendir_error::RETRY:       throw Lookup_failed();
+		case Opendir_error::OUT_OF_RAM:  throw Out_of_ram();
+		case Opendir_error::OUT_OF_CAPS: throw Out_of_caps();
+		} });
 	}
 
 	static inline void assert_mkdir(Mkdir_result r)

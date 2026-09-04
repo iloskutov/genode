@@ -31,7 +31,7 @@ namespace Vfs_pipe {
 	using Pipe_buffer = Ring_buffer<unsigned char, PIPE_BUF_SIZE+1>;
 
 	struct Pipe_handle;
-	struct Dir_handle;
+	struct Dir_channel;
 
 	using Handle_element = Fifo_element<Pipe_handle>;
 	using Handle_fifo    = Fifo<Handle_element>;
@@ -80,20 +80,6 @@ struct Vfs_pipe::Pipe_handle : Vfs_handle, private Pipe_handle_registry_element
 	bool read_ready()  const override;
 	bool write_ready() const override;
 	void notify_read_ready() override;
-};
-
-
-struct Vfs_pipe::Dir_handle : Vfs_handle
-{
-	using Vfs_handle::Vfs_handle;
-
-	Read_result read(At, Byte_range_ptr const &) override { return Read_error::DENIED; }
-
-	Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_ERR_NO_PERM; }
-
-	bool read_ready()  const override { return false; }
-	bool write_ready() const override { return false; }
-	void notify_read_ready() override { }
 };
 
 
@@ -401,31 +387,6 @@ class Vfs_pipe::File_system : public Vfs::File_system
 				});
 			}
 
-			return result;
-		}
-
-		Opendir_result opendir(char const *cpath, Vfs_handle **handle,
-		                       Allocator &alloc) override
-		{
-			Path io { cpath };
-			if (io == "/") {
-				*handle = new (alloc) Dir_handle(*this, alloc, 0);
-				return OPENDIR_OK;
-			}
-
-			auto result { OPENDIR_ERR_PERMISSION_DENIED };
-			/* create a path that matches with _pipe_id() */
-			Path pseudo_path { cpath };
-			io.keep_only_last_element();
-			pseudo_path.append(io.string());
-			Pipe_space::Id id { ~0UL };
-			if (_pipe_id(pseudo_path.string(), id)) {
-				_try_apply(id, [&handle, &alloc, this, &result] (Pipe &/*pipe*/) {
-					*handle = new (alloc)
-						Dir_handle(*this, alloc, 0);
-					result = OPENDIR_OK;
-				});
-			}
 			return result;
 		}
 

@@ -84,14 +84,17 @@ class Genode::Vfs::Single_file_system : public File_system
 			using Vfs_handle::Vfs_handle;
 		};
 
-		struct Single_vfs_dir_handle : Vfs_handle, Noncopyable
+		struct Single_dir_channel : Vfs::Dir_channel
 		{
 			Single_file_system &_fs;
+			Allocator          &_alloc;
 
-			Single_vfs_dir_handle(Single_file_system &fs, Allocator &alloc)
+			Single_dir_channel(Single_file_system &fs, Allocator &alloc)
 			:
-				Vfs_handle(fs, alloc, 0), _fs(fs)
+				_fs(fs), _alloc(alloc)
 			{ }
+
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -112,9 +115,6 @@ class Genode::Vfs::Single_file_system : public File_system
 				};
 				return sizeof(Dirent);
 			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return true; }
 		};
 
 		bool _root(const char *path)
@@ -195,19 +195,16 @@ class Genode::Vfs::Single_file_system : public File_system
 			return _single_file(path);
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			if (!_root(path))
-				return OPENDIR_ERR_LOOKUP_FAILED;
+				return Opendir_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Single_vfs_dir_handle(*this, alloc);
-				return OPENDIR_OK;
+				return *new (alloc) Single_dir_channel(*this, alloc);
 			}
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 		}
 
 		void close(Vfs_handle *handle) override

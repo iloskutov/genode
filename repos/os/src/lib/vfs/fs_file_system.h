@@ -473,11 +473,25 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			using Fs_vfs_handle::Fs_vfs_handle;
 		};
 
-		struct Fs_vfs_dir_handle : Fs_vfs_handle
+		struct Fs_dir_channel : Vfs::Dir_channel, private Open_fs_handle
 		{
-			enum { DIRENT_SIZE = sizeof(::File_system::Directory_entry) };
+			File_system &_fs;
+			Allocator   &_alloc;
 
-			using Fs_vfs_handle::Fs_vfs_handle;
+			Queued_state      _queued_read_state { };
+			Packet_descriptor _queued_read_packet { };
+
+			Fs_dir_channel(File_system &fs, Allocator &alloc, Handle_space &space,
+			               ::File_system::Node_handle node_handle)
+			:
+				Open_fs_handle(space, node_handle), _fs(fs), _alloc(alloc)
+			{ }
+
+			~Fs_dir_channel() { _fs._fs.close(file_handle()); }
+
+			void destruct() override {destroy(_alloc, this); }
+
+			enum { DIRENT_SIZE = sizeof(::File_system::Directory_entry) };
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -490,9 +504,12 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				using ::File_system::Directory_entry;
 
 				Directory_entry entry { };
-
+				Byte_range_ptr entry_bytes((char *)(&entry), DIRENT_SIZE);
 				Read_result const read_result =
-					Fs_vfs_handle::read(at, Byte_range_ptr((char *)(&entry), DIRENT_SIZE));
+					_read<Read_result, Read_error>(_fs, file_handle(),
+					                               _queued_read_state,
+					                               _queued_read_packet,
+					                               at, entry_bytes);
 
 				return read_result.convert<Read_result>(
 					[&] (size_t num_bytes) -> Read_result {
@@ -512,6 +529,22 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 					},
 					[&] (Read_error e) { return e; });
 			}
+
+			/**
+			 * Open_handle interface
+			 */
+			Handle_ack_result handle_ack(Packet_descriptor const &packet) override
+			{
+				if (!packet.succeeded())
+					error("vfs_fs: dir packet operation=", (int)packet.operation(), " failed");
+
+				if (packet.operation() != Packet_descriptor::READ)
+					error("vfs_fs: ACK for unexpected dir operation ", (int)packet.operation());
+
+				_queued_read_packet = packet;
+				_queued_read_state  = Queued_state::ACK;
+				return { };
+			};
 		};
 
 		struct Fs_vfs_symlink_handle : Fs_vfs_handle
@@ -877,27 +910,29 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return OPEN_OK;
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			Absolute_path dir_path(path);
 
+			Opendir_error error = Opendir_error::DENIED;
+
+			::File_system::Dir_handle dir { ~0u };
 			try {
-				::File_system::Dir_handle dir = _fs.dir(dir_path.base(), false);
-
-				*out_handle = new (alloc)
-					Fs_vfs_dir_handle(*this, alloc, ::File_system::READ_ONLY,
-					                  _handle_space, dir);
+				dir = _fs.dir(dir_path.base(), false);
+				return *new (alloc) Fs_dir_channel(*this, alloc, _handle_space, dir);
 			}
-			catch (::File_system::Lookup_failed)       { return OPENDIR_ERR_LOOKUP_FAILED;       }
-			catch (::File_system::Name_too_long)       { return OPENDIR_ERR_NAME_TOO_LONG;       }
-			catch (::File_system::Node_already_exists) { return OPENDIR_ERR_NODE_ALREADY_EXISTS; }
-			catch (::File_system::No_space)            { return OPENDIR_ERR_NO_SPACE;            }
-			catch (::File_system::Permission_denied)   { return OPENDIR_ERR_PERMISSION_DENIED;   }
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+			catch (::File_system::Lookup_failed)       { }
+			catch (::File_system::Name_too_long)       { }
+			catch (::File_system::Node_already_exists) { }
+			catch (::File_system::No_space)            { }
+			catch (::File_system::Permission_denied)   { }
+			catch (Out_of_ram)                         { error = Opendir_error::OUT_OF_RAM; }
+			catch (Out_of_caps)                        { error = Opendir_error::OUT_OF_CAPS; }
 
-			return OPENDIR_OK;
+			if (dir.value != ~0u)
+				_fs.close(dir);
+
+			return error;
 		}
 
 		Openlink_result openlink(char const *path, bool create,

@@ -57,16 +57,7 @@ class Genode::Vfs::File_handle : Noncopyable
 		struct { Channel *_channel_ptr = nullptr; };
 
 		template <typename ERR>
-		static ERR _converted(Attach_error e)
-		{
-			switch (e) {
-			case Attach_error::RETRY:       return ERR::RETRY;
-			case Attach_error::DENIED:      return ERR::DENIED;
-			case Attach_error::OUT_OF_RAM:  return ERR::OUT_OF_RAM;
-			case Attach_error::OUT_OF_CAPS: return ERR::OUT_OF_CAPS;
-			}
-			return ERR::DENIED;
-		}
+		static ERR _converted(Attach_error e) { return converted_error<ERR>(e); }
 
 		unsigned _mode() const
 		{

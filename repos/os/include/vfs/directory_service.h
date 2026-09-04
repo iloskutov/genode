@@ -63,21 +63,9 @@ struct Genode::Vfs::Directory_service : Interface
 		(void)path; (void)mode; return OPEN_ERR_UNACCESSIBLE;
 	}
 
-	enum Opendir_result
+	virtual Opendir_result opendir(char const *path, Allocator &)
 	{
-		OPENDIR_ERR_LOOKUP_FAILED,
-		OPENDIR_ERR_NAME_TOO_LONG,
-		OPENDIR_ERR_NODE_ALREADY_EXISTS,
-		OPENDIR_ERR_NO_SPACE,
-		OPENDIR_ERR_OUT_OF_RAM,
-		OPENDIR_ERR_OUT_OF_CAPS,
-		OPENDIR_ERR_PERMISSION_DENIED,
-		OPENDIR_OK
-	};
-
-	virtual Opendir_result opendir(char const *path, Vfs_handle **, Allocator &)
-	{
-		(void)path; return OPENDIR_ERR_LOOKUP_FAILED;
+		(void)path; return Opendir_error::DENIED;
 	}
 
 	enum Openlink_result

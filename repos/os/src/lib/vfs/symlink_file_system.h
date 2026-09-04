@@ -57,14 +57,17 @@ class Vfs_symlink::File_system : public Single_file_system
 			bool write_ready() const override { return false; }
 		};
 
-		struct Symlink_dir_handle : Vfs_handle, Noncopyable
+		struct Symlink_dir_channel : Vfs::Dir_channel
 		{
 			File_system &_fs;
+			Allocator   &_alloc;
 
-			Symlink_dir_handle(File_system &fs, Allocator &alloc)
+			Symlink_dir_channel(File_system &fs, Allocator &alloc)
 			:
-				Vfs_handle(fs, alloc, 0), _fs(fs)
+				_fs(fs), _alloc(alloc)
 			{ }
+
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -83,9 +86,6 @@ class Vfs_symlink::File_system : public Single_file_system
 				};
 				return sizeof(Dirent);
 			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return true; }
 		};
 
 	public:
@@ -100,18 +100,16 @@ class Vfs_symlink::File_system : public Single_file_system
 			_target(config.attribute_value("target", Target()))
 		{ }
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			if (!_root(path))
-				return OPENDIR_ERR_LOOKUP_FAILED;
+				return Opendir_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Symlink_dir_handle(*this, alloc);
-				return OPENDIR_OK;
+				return *new (alloc) Symlink_dir_channel(*this, alloc);
 			}
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 		}
 
 		Open_result open(char const *, unsigned, Vfs_handle **, Allocator&) override {

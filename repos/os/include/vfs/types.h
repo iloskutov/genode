@@ -135,6 +135,45 @@ namespace Genode::Vfs {
 
 	enum class Write_ready_result { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
+	struct Dir_channel : Interface, Noncopyable
+	{
+		enum class Read_error { RETRY, DENIED };
+
+		using Read_result = Attempt<size_t, Read_error>;
+
+		struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
+
+		/**
+		 * Initiate or complete read of directory entries
+		 *
+		 * On success, the method returns the number of read bytes.
+		 * If zero, the end of file is reached.
+		 *
+		 * \return Read_error::RETRY  if the read operation is not yet
+		 *                            complete and must by tried again once
+		 *                            external I/O has progressed
+		 */
+		virtual Read_result read(At, Byte_range_ptr const &dst) = 0;
+
+		virtual void destruct() = 0;
+	};
+
+	enum class Opendir_error { RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
+
+	using Opendir_result = Unique_attempt<Dir_channel &, Opendir_error>;
+
+	template <typename TO, typename FROM>
+	static inline TO converted_error(FROM e)
+	{
+		switch (e) {
+		case FROM::RETRY:       return TO::RETRY;
+		case FROM::DENIED:      return TO::DENIED;
+		case FROM::OUT_OF_RAM:  return TO::OUT_OF_RAM;
+		case FROM::OUT_OF_CAPS: return TO::OUT_OF_CAPS;
+		}
+		return TO::DENIED;
+	}
+
 	struct Env;
 	struct Root;
 }

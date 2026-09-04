@@ -43,7 +43,7 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 		using Path = Genode::Path<FF_MAX_LFN>;
 
 		struct Fatfs_file_handle;
-		struct Fatfs_dir_handle;
+		struct Fatfs_dir_channel;
 		struct Fatfs_file_watch_handle;
 		struct Fatfs_dir_watch_handle;
 
@@ -209,16 +209,20 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			}
 		};
 
-		struct Fatfs_dir_handle : Fatfs_handle
+		struct Fatfs_dir_channel : Vfs::Dir_channel
 		{
+			Allocator &_alloc;
+
 			file_size cur_index = 0;
 			Path const path;
 			DIR dir;
 
-			Fatfs_dir_handle(File_system &fs, Allocator &alloc, char const *path)
+			Fatfs_dir_channel(Allocator &alloc, char const *path)
 			:
-				Fatfs_handle(fs, alloc, 0), path(path)
+				_alloc(alloc), path(path)
 			{ }
+
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -258,9 +262,6 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				};
 				return sizeof(Dirent);
 			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return false; }
 		};
 
 		Vfs::Env  &_vfs_env;
@@ -427,59 +428,47 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			return OPEN_OK;
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **vfs_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
-			Fatfs_dir_handle *handle;
+			Opendir_error error = Opendir_error::DENIED;
 
 			/* attempt allocation before modifying blocks */
-			handle = new (alloc) Fatfs_dir_handle(*this, alloc, path);
+			try {
+				Fatfs_dir_channel &channel = *new (alloc) Fatfs_dir_channel(alloc, path);
 
-			FRESULT res = f_opendir(&handle->dir, (const TCHAR*)path);
-			if (res != FR_OK) {
-				destroy(alloc, handle);
-				switch (res) {
-				case FR_NO_PATH: return OPENDIR_ERR_LOOKUP_FAILED;
-				default:         return OPENDIR_ERR_PERMISSION_DENIED;
-				}
+				FRESULT res = f_opendir(&channel.dir, (const TCHAR*)path);
+				if (res == FR_OK)
+					return channel;
+
+				destroy(alloc, &channel);
+
+				/* distinguish error regarding FR_NO_PATH? */
 			}
-
-			*vfs_handle = handle;
-
-			return OPENDIR_OK;
+			catch (Out_of_ram)  { error = Opendir_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { error = Opendir_error::OUT_OF_CAPS; }
+			return error;
 		}
 
 		void close(Vfs_handle *vfs_handle) override
 		{
-			{
-				auto *handle = dynamic_cast<Fatfs_file_handle *>(vfs_handle);
-				bool notify = false;
+			auto *handle = dynamic_cast<Fatfs_file_handle *>(vfs_handle);
+			bool notify = false;
 
-				if (handle) {
-					File *file = handle->file;
-					if (file) {
-						file->handles.remove(handle);
-						if (file->opened()) {
-							notify = handle->modifying;
-						} else {
-							_close(*file);
-						}
+			if (handle) {
+				File *file = handle->file;
+				if (file) {
+					file->handles.remove(handle);
+					if (file->opened()) {
+						notify = handle->modifying;
+					} else {
+						_close(*file);
 					}
-					destroy(handle->alloc(), handle);
-
-					if (notify)
-						_notify(*file);
-					return;
 				}
-			}
+				destroy(handle->alloc(), handle);
 
-			{
-				auto *handle = dynamic_cast<Fatfs_dir_handle *>(vfs_handle);
-
-				if (handle) {
-					f_closedir(&handle->dir);
-					destroy(handle->alloc(), handle);
-				}
+				if (notify)
+					_notify(*file);
+				return;
 			}
 		}
 

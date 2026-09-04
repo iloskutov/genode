@@ -50,6 +50,7 @@ namespace Vfs_ram {
 	using Seek = ::File_system::Chunk_base::Seek;
 
 	struct Io_handle;
+	struct Dir_channel;
 
 	class Node;
 	class File;
@@ -93,6 +94,23 @@ struct Vfs_ram::Io_handle final : Vfs_handle, private List<Io_handle>::Element
 	inline Ftruncate_result ftruncate(file_size) override;
 	inline Sync_result sync() override;
 	inline bool update_modification_timestamp(Timestamp) override;
+};
+
+
+struct Vfs_ram::Dir_channel : Vfs::Dir_channel
+{
+	File_system &_fs;
+	Allocator   &_alloc;
+	Directory   &_dir;
+
+	Dir_channel(File_system &fs, Allocator &alloc, Directory &dir)
+	:
+		_fs(fs), _alloc(alloc), _dir(dir)
+	{ }
+
+	void destruct() override { destroy(_alloc, this); }
+
+	inline Read_result read(At, Byte_range_ptr const &) override;
 };
 
 
@@ -393,12 +411,12 @@ class Vfs_ram::Directory : public Vfs_ram::Node
 
 		size_t length() override { return _count; }
 
-		Read_result read(Byte_range_ptr const &dst, Seek const seek) override
+		Dir_channel::Read_result read_dir(Byte_range_ptr const &dst, Seek const seek)
 		{
 			using Dirent = Directory_service::Dirent;
 
 			if (dst.num_bytes < sizeof(Dirent))
-				return Read_error::DENIED;
+				return Dir_channel::Read_error::DENIED;
 
 			size_t index = seek.value / sizeof(Dirent);
 
@@ -407,7 +425,7 @@ class Vfs_ram::Directory : public Vfs_ram::Node
 			Node *node_ptr = _entries.first();
 			if (node_ptr) node_ptr = node_ptr->index(index);
 			if (!node_ptr)
-				return Vfs_handle::Read_eof();
+				return Dir_channel::Read_eof();
 
 			Node &node = *node_ptr;
 
@@ -609,28 +627,25 @@ class Vfs_ram::File_system : public Vfs::File_system
 			}
 		}
 
-		Opendir_result opendir(char const * const path,
-		                       Vfs_handle **handle, Allocator &alloc) override
+		Opendir_result opendir(char const * const path, Allocator &alloc) override
 		{
 			Directory * const parent = lookup_parent(path);
 			if (!parent)
-				return OPENDIR_ERR_LOOKUP_FAILED;
+				return Opendir_error::DENIED;
 
 			Node * const node = lookup(path);
-			if (!node) return OPENDIR_ERR_LOOKUP_FAILED;
+			if (!node) return Opendir_error::DENIED;
 
 			Directory *dir = dynamic_cast<Directory *>(node);
-			if (!dir) return OPENDIR_ERR_LOOKUP_FAILED;
+			if (!dir) return Opendir_error::DENIED;
 
 			try {
-				Io_handle * const io_handle_ptr = new (alloc)
-					Io_handle(*this, *this, alloc, Io_handle::STATUS_RDONLY, *dir, path);
-				dir->open(*io_handle_ptr);
-				*handle = io_handle_ptr;
-				return OPENDIR_OK;
+				return *new (alloc) Dir_channel(*this, alloc, *dir);
 			}
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
+
+			return Opendir_error::DENIED;
 		}
 
 		Openlink_result openlink(char const * const path, bool create,
@@ -906,6 +921,12 @@ Vfs_ram::Vfs_handle::Ftruncate_result Vfs_ram::Io_handle::ftruncate(file_size le
 	try { node.truncate(at); }
 	catch (Out_of_memory) { return FTRUNCATE_ERR_NO_SPACE; }
 	return FTRUNCATE_OK;
+}
+
+
+Genode::Vfs::Dir_channel::Read_result Vfs_ram::Dir_channel::read(At at, Byte_range_ptr const &dst)
+{
+	return _dir.read_dir(dst, Seek { size_t(at.pos) });
 }
 
 

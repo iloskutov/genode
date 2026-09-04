@@ -79,29 +79,6 @@ inline void assert_mkdir(Vfs::Mkdir_result r)
 	throw Exception();
 }
 
-inline void assert_opendir(Vfs::Directory_service::Opendir_result r)
-{
-	using Result = Vfs::Directory_service::Opendir_result;
-	switch (r) {
-	case Result::OPENDIR_OK: return;
-	case Result::OPENDIR_ERR_LOOKUP_FAILED:
-		error("OPENDIR_ERR_LOOKUP_FAILED"); break;
-	case Result::OPENDIR_ERR_NAME_TOO_LONG:
-		error("OPENDIR_ERR_NAME_TOO_LONG"); break;
-	case Result::OPENDIR_ERR_NODE_ALREADY_EXISTS:
-		error("OPENDIR_ERR_NODE_ALREADY_EXISTS"); break;
-	case Result::OPENDIR_ERR_NO_SPACE:
-		error("OPENDIR_ERR_NO_SPACE"); break;
-	case Result::OPENDIR_ERR_OUT_OF_RAM:
-		error("OPENDIR_ERR_OUT_OF_RAM"); break;
-	case Result::OPENDIR_ERR_OUT_OF_CAPS:
-		error("OPENDIR_ERR_OUT_OF_CAPS"); break;
-	case Result::OPENDIR_ERR_PERMISSION_DENIED:
-		error("OPENDIR_ERR_PERMISSION_DENIED"); break;
-	}
-	throw Exception();
-}
-
 inline void assert_write(Vfs::Vfs_handle::Write_result r)
 {
 	r.with_error([&] (Vfs::Vfs_handle::Write_error e) {
@@ -461,49 +438,60 @@ struct Unlink_test : public Stress_test
 		::Path subpath(path);
 		subpath.append("/");
 
-		Vfs::Vfs_handle *dir_handle;
-		assert_opendir(vfs.opendir(path, &dir_handle, alloc));
+		vfs.opendir(path, alloc).with_result(
+			[&] (Vfs::Dir_channel &channel) {
 
-		Vfs::Directory_service::Dirent dirent { };
-		for (unsigned i = vfs.num_dirent(path); i;) {
-			--i;
+				Vfs::Directory_service::Dirent dirent { };
+				for (unsigned i = vfs.num_dirent(path); i;) {
+					--i;
 
-			Byte_range_ptr const dst { (char*)&dirent, sizeof(dirent) };
-			Vfs::At        const at  { i*sizeof(dirent) };
+					Byte_range_ptr const dst { (char*)&dirent, sizeof(dirent) };
+					Vfs::At        const at  { i*sizeof(dirent) };
 
-			Vfs::Vfs_handle::Read_result result = Vfs::Vfs_handle::Read_error::DENIED;
+					Vfs::Dir_channel::Read_result result = Vfs::Dir_channel::Read_error::DENIED;
 
-			for (;;) {
-				result = dir_handle->read(at, dst);
-				if (result != Vfs::Vfs_handle::Read_error::RETRY)
-					break;
-				_io.commit_and_wait();
-			}
-			if (result.failed()) {
-				error("read of dir entry failed");
-				throw Exception();
-			}
+					for (;;) {
+						result = channel.read(at, dst);
+						if (result != Vfs::Dir_channel::Read_error::RETRY)
+							break;
+						_io.commit_and_wait();
+					}
+					if (result.failed()) {
+						error("read of dir entry failed");
+						throw Exception();
+					}
 
-			subpath.append(dirent.name.buf);
-			switch (dirent.type) {
+					subpath.append(dirent.name.buf);
+					switch (dirent.type) {
 
-			case Vfs::Dirent_type::DIRECTORY:
-				empty_dir(subpath.base());
-				[[fallthrough]];
+					case Vfs::Dirent_type::DIRECTORY:
+						empty_dir(subpath.base());
+						[[fallthrough]];
 
-			default:
-				try {
-					assert_unlink(vfs.unlink(subpath.base()));
-					++count;
-				} catch (...) {
-					error("unlink ", subpath," failed");
-					throw;
+					default:
+						try {
+							assert_unlink(vfs.unlink(subpath.base()));
+							++count;
+						} catch (...) {
+							error("unlink ", subpath," failed");
+							throw;
+						}
+						subpath.strip_last_element();
+					}
 				}
-				subpath.strip_last_element();
-			}
-		}
 
-		dir_handle->close();
+				channel.destruct();
+			},
+			[&] (Vfs::Opendir_error e) {
+				using Error = Vfs::Opendir_error;
+				switch (e) {
+				case Error::DENIED:      error("Opendir_error::DENIED");      break;
+				case Error::RETRY:       error("Opendir_error::RETRY");       break;
+				case Error::OUT_OF_RAM:  error("Opendir_error::OUT_OF_RAM");  break;
+				case Error::OUT_OF_CAPS: error("Opendir_error::OUT_OF_CAPS"); break;
+				}
+				throw Exception();
+			});
 	}
 
 	Unlink_test(Vfs::File_system &vfs, Vfs::Env::Io &io, Genode::Allocator &alloc,

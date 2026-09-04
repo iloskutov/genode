@@ -168,6 +168,46 @@ class Vfs_audit::File_system : public Vfs::File_system
 			}
 		};
 
+		struct Dir_channel : Vfs::Dir_channel
+		{
+			Allocator &_alloc;
+			Log       &_audit_log;
+
+			Absolute_path const path;
+
+			Vfs::Dir_channel &audited;
+
+			void _log(auto &&... args) { _audit_log.log(args...); }
+
+			Dir_channel(Allocator &alloc, char const *path, Log &log,
+			            Vfs::Dir_channel &audited)
+			:
+				_alloc(alloc), _audit_log(log), path(path), audited(audited)
+			{ }
+
+			void destruct() override
+			{
+				audited.destruct();
+				destroy(_alloc, this);
+			}
+
+			Read_result read(At const at, Byte_range_ptr const &dst) override
+			{
+				return audited.read(at, dst).convert<Read_result>(
+					[&] (size_t num_bytes) {
+						_log("completed read from ", path, " ", num_bytes);
+						return num_bytes;
+					},
+					[&] (Read_error e) {
+						if (e == Read_error::RETRY)
+							_log("read needs retry for ", path);
+						else
+							_log("read error ", (int)e, " for ", path);
+						return e;
+					});
+			}
+		};
+
 	public:
 
 		File_system(Vfs::Env &env, Node const &config)
@@ -214,20 +254,19 @@ class Vfs_audit::File_system : public Vfs::File_system
 			return r;
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out, Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			_log(__func__, " ", path);
 
-			Vfs_handle *audited = nullptr;
-			Opendir_result r = _fs.opendir(_expand(path).string(), &audited, alloc);
-
-			if (!audited || r != OPENDIR_OK)
-				return r;
-
-			try { *out = new (alloc) Handle(*this, alloc, 0, path, _audit_log, *audited); }
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM;  }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
-			return r;
+			return _fs.opendir(_expand(path).string(), alloc).convert<Opendir_result>(
+				[&] (Vfs::Dir_channel &audited) -> Opendir_result {
+					try {
+						return *new (alloc) Dir_channel(alloc, path, _audit_log, audited);
+					}
+					catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
+					catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
+				},
+				[&] (Opendir_error e) -> Opendir_result { return e; });
 		}
 
 		void close(Vfs::Vfs_handle *vfs_handle) override

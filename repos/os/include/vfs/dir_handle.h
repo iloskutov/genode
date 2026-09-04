@@ -35,8 +35,6 @@ class Genode::Vfs::Dir_handle : Noncopyable
 
 		Path const path;
 
-		using Channel = Vfs_handle;
-
 	private:
 
 		Dir_handles &_handles;
@@ -45,7 +43,7 @@ class Genode::Vfs::Dir_handle : Noncopyable
 
 		Dir_handles::Element _elem { _handles, *this };
 
-		struct { Channel *_channel_ptr = nullptr; };
+		struct { Dir_channel *_channel_ptr = nullptr; };
 
 	public:
 
@@ -60,7 +58,7 @@ class Genode::Vfs::Dir_handle : Noncopyable
 		void detach()
 		{
 			if (_channel_ptr)
-				_channel_ptr->ds().close(_channel_ptr);
+				_channel_ptr->destruct();
 
 			_channel_ptr = nullptr;
 		}
@@ -83,30 +81,22 @@ class Genode::Vfs::Dir_handle : Noncopyable
 Genode::Vfs::Read_result
 Genode::Vfs::Dir_handle::read(At at, Byte_range_ptr const &dst)
 {
-	if (!_channel_ptr) {
-		Directory_service::Opendir_result const result =
-			_root_dir.opendir(path.string(), &_channel_ptr, _alloc);
+	Read_result result = Read_error::DENIED;
 
-		switch (result) {
-		case Directory_service::OPENDIR_ERR_PERMISSION_DENIED:
-		case Directory_service::OPENDIR_ERR_LOOKUP_FAILED:
-		case Directory_service::OPENDIR_ERR_NODE_ALREADY_EXISTS:
-		case Directory_service::OPENDIR_ERR_NAME_TOO_LONG:
-		case Directory_service::OPENDIR_ERR_NO_SPACE:    return Read_eof();
-		case Directory_service::OPENDIR_ERR_OUT_OF_RAM:  return Read_error::OUT_OF_RAM;
-		case Directory_service::OPENDIR_ERR_OUT_OF_CAPS: return Read_error::OUT_OF_CAPS;
-		case Directory_service::OPENDIR_OK: break;
-		}
-	}
 	if (!_channel_ptr)
-		return Read_eof();
+		_root_dir.opendir(path.string(), _alloc).with_result(
+			[&] (Dir_channel  &c) { _channel_ptr = &c; },
+			[&] (Opendir_error e) { result = converted_error<Read_error>(e); });
+
+	if (!_channel_ptr)
+		return result;
 
 	return _channel_ptr->read(at, dst).convert<Read_result>(
 		[&] (size_t num_bytes) { return num_bytes; },
-		[&] (Channel::Read_error e) {
+		[&] (Dir_channel::Read_error e) {
 			switch (e) {
-			case Channel::Read_error::RETRY: return Read_error::RETRY;
-			case Channel::Read_error::DENIED: break;
+			case Dir_channel::Read_error::RETRY: return Read_error::RETRY;
+			case Dir_channel::Read_error::DENIED: break;
 			}
 			return Read_error::DENIED;
 		});

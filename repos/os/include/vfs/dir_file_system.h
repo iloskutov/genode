@@ -84,14 +84,17 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				}, mismatch_fn);
 		}
 
-		struct Dir_vfs_handle : Vfs_handle
+		struct Dir_channel : Vfs::Dir_channel
 		{
 			Dir_file_system &_fs;
+			Allocator       &_alloc;
 
-			Dir_vfs_handle(Dir_file_system &fs, Allocator &alloc)
+			Dir_channel(Dir_file_system &fs, Allocator &alloc)
 			:
-				Vfs_handle(fs, alloc, 0), _fs(fs)
+				_fs(fs), _alloc(alloc)
 			{ }
+
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -110,9 +113,6 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				};
 				return sizeof(Dirent);
 			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return false; }
 		};
 
 		friend class Vfs::Root;
@@ -228,21 +228,19 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				[&] () -> Open_result { return OPEN_ERR_UNACCESSIBLE; });
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			if (_slash(path)) {
-				try { *out = new (alloc) Dir_vfs_handle(*this, alloc); }
-				catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-				catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
-				return OPENDIR_OK;
+				try {
+					return *new (alloc) Dir_channel(*this, alloc);
+				}
+				catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
+				catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 			}
 
 			return _with_sub_dir_path(path,
-				[&] (char const *path) {
-					return _union.opendir(path, out, alloc);
-				},
-				[&] () -> Opendir_result { return OPENDIR_ERR_LOOKUP_FAILED; });
+				[&] (char const *path)   { return _union.opendir(path, alloc); },
+				[&] () -> Opendir_result { return Opendir_error::DENIED; });
 		}
 
 		Openlink_result openlink(char const *path, bool create,

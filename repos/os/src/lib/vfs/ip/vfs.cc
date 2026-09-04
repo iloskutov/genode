@@ -73,7 +73,7 @@ namespace Vfs_ip {
 
 	struct Ip_vfs_handle;
 	class Ip_vfs_file_handle;
-	class Ip_vfs_dir_handle;
+	class Ip_dir_channel;
 	class Ip_file_system;
 
 	using Ip_vfs_file_handles = List<List_element<Ip_vfs_file_handle> >;
@@ -359,22 +359,21 @@ struct Vfs_ip::Ip_vfs_file_handle final : Vfs_handle
 };
 
 
-struct Vfs_ip::Ip_vfs_dir_handle final : Vfs_handle
+struct Vfs_ip::Ip_dir_channel : Vfs::Dir_channel
 {
-	Vfs_ip::Directory &dir;
+	Allocator         &_alloc;
+	Vfs_ip::Directory &_dir;
 
-	Ip_vfs_dir_handle(File_system &fs, Allocator &alloc, int status_flags,
-	                  Vfs_ip::Directory &dir)
+	Ip_dir_channel(Allocator &alloc, Vfs_ip::Directory &dir)
 	:
-		Vfs_handle(fs, alloc, status_flags), dir(dir)
+		_alloc(alloc), _dir(dir)
 	{ }
 
-	bool read_ready()  const override { return true; }
-	bool write_ready() const override { return false; }
+	void destruct() override { destroy(_alloc, this); }
 
 	Read_result read(At const at, Byte_range_ptr const &dst) override
 	{
-		long const res = dir.read(dst, at.pos);
+		long const res = _dir.read(dst, at.pos);
 		if (res < 0)
 			return Read_error::DENIED;
 		return res;
@@ -1898,23 +1897,17 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 			return OPEN_ERR_UNACCESSIBLE;
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			Vfs_ip::Node *node = _lookup(path);
 
-			if (!node) return OPENDIR_ERR_LOOKUP_FAILED;
+			if (!node) return Opendir_error::DENIED;
 
 			Vfs_ip::Directory *dir = dynamic_cast<Vfs_ip::Directory*>(node);
-			if (dir) {
-				Ip_vfs_dir_handle *handle =
-					new (alloc) Vfs_ip::Ip_vfs_dir_handle(*this, alloc, 0, *dir);
-				*out_handle = handle;
+			if (dir)
+				return *new (alloc) Vfs_ip::Ip_dir_channel(alloc, *dir);
 
-				return OPENDIR_OK;
-			}
-
-			return OPENDIR_ERR_LOOKUP_FAILED;
+			return Opendir_error::DENIED;
 		}
 
 		void close(Vfs_handle *vfs_handle) override

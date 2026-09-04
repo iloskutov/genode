@@ -408,11 +408,13 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 
 	public:
 
-		struct Dir_vfs_handle : Vfs_handle
+		struct Dir_channel : Vfs::Dir_channel
 		{
+			Allocator &_alloc;
+
 			Key_registry const &_key_reg;
 
-			bool const _root_dir { false };
+			bool const _root_dir;
 
 			Read_result _query_keys(size_t index, Dirent &out)
 			{
@@ -448,14 +450,12 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 				return sizeof(Dirent);
 			}
 
-			Dir_vfs_handle(Directory_service  &ds,
-			               Allocator          &alloc,
-			               Key_registry const &key_reg,
-			               bool                root_dir)
+			Dir_channel(Allocator &alloc, Key_registry const &key_reg, bool root_dir)
 			:
-				Vfs_handle(ds, alloc, 0),
-				_key_reg(key_reg), _root_dir(root_dir)
+				_alloc(alloc), _key_reg(key_reg), _root_dir(root_dir)
 			{ }
+
+			void destruct() override { destroy(_alloc, this); }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -476,39 +476,6 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 					return _query_root(index, out);
 				}
 			}
-
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return true; }
-		};
-
-		struct Dir_snap_vfs_handle : Vfs_handle
-		{
-			Vfs_handle &vfs_handle;
-
-			Dir_snap_vfs_handle(Directory_service &ds,
-			                    Allocator         &alloc,
-			                    Vfs_handle        &vfs_handle)
-			:
-				Vfs_handle(ds, alloc, 0), vfs_handle(vfs_handle)
-			{ }
-
-			~Dir_snap_vfs_handle()
-			{
-				vfs_handle.close();
-			}
-
-			Read_result read(At, Byte_range_ptr const &) override
-			{
-				warning("Tresor_crypto::Dir_snap_vfs_handle::complete_read not implemented");
-				return Read_error::DENIED;
-			}
-
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return true; }
 		};
 
 		Key_registry _key_reg;
@@ -581,36 +548,16 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 			return OPEN_ERR_UNACCESSIBLE;
 		}
 
-		Opendir_result opendir(char const  *path,
-		                       Vfs_handle **out_handle,
-		                       Allocator   &alloc) override
+		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			_key_reg.update(_vfs_env);
 
 			bool const top = _top_dir(path);
-			if (_root_dir(path) || top) {
+			if (_root_dir(path) || top)
+				return *new (alloc) Dir_channel(alloc, _key_reg, top);
 
-				*out_handle = new (alloc) Dir_vfs_handle(*this, alloc,
-				                                         _key_reg, top);
-				return OPENDIR_OK;
-			} else {
-				char const *sub_path = _sub_path(path);
-				if (!sub_path) {
-					return OPENDIR_ERR_LOOKUP_FAILED;
-				}
-				try {
-					Key_file_system &fs = _key_reg.by_path(sub_path);
-					Vfs_handle *handle = nullptr;
-					Opendir_result const res = fs.opendir(sub_path, &handle, alloc);
-					if (res != OPENDIR_OK) {
-						return OPENDIR_ERR_LOOKUP_FAILED;
-					}
-					*out_handle = new (alloc) Dir_snap_vfs_handle(*this,
-					                                              alloc, *handle);
-					return OPENDIR_OK;
-				} catch (Key_registry::Invalid_path) { }
-			}
-			return OPENDIR_ERR_LOOKUP_FAILED;
+			warning("vfs_tresor_crypto: opendir for non-root dir not implemented");
+			return Opendir_error::DENIED;
 		}
 
 		void close(Vfs_handle *handle) override

@@ -201,9 +201,18 @@ class Vfs_tar::File_system : public Vfs::File_system
 		}
 	};
 
-	struct Tar_vfs_dir_handle : Tar_vfs_handle
+	struct Tar_dir_channel : Vfs::Dir_channel
 	{
-		using Tar_vfs_handle::Tar_vfs_handle;
+		File_system &_fs;
+		Allocator   &_alloc;
+		Node  const &_node;
+
+		Tar_dir_channel(File_system &fs, Allocator &alloc, Node const &node)
+		:
+			_fs(fs), _alloc(alloc), _node(node)
+		{ }
+
+		void destruct() override { destroy(_alloc, this); }
 
 		Read_result read(At const at, Byte_range_ptr const &dst) override
 		{
@@ -214,7 +223,7 @@ class Vfs_tar::File_system : public Vfs::File_system
 
 			unsigned const index = unsigned(at.pos / sizeof(Dirent));
 
-			Node const *node_ptr = _node->lookup_child(index);
+			Node const *node_ptr = _node.lookup_child(index);
 
 			if (!node_ptr) {
 				dirent = Dirent { };
@@ -698,22 +707,21 @@ class Vfs_tar::File_system : public Vfs::File_system
 			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
 		}
 
-		Opendir_result opendir(char const *path, Vfs_handle **out_handle,
-		                       Allocator& alloc) override
+		Opendir_result opendir(char const *path, Allocator& alloc) override
 		{
 			Node const *node = dereference(path);
 
 			if (!node ||
 			    (node->record && (node->record->type() != Record::TYPE_DIR)))
-				return OPENDIR_ERR_LOOKUP_FAILED;
+				return Opendir_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Tar_vfs_dir_handle(*this, alloc, 0, node);
-				return OPENDIR_OK;
+				return *new (alloc) Tar_dir_channel(*this, alloc, *node);
 			}
-			catch (Out_of_ram)  { return OPENDIR_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENDIR_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
+
+			return Opendir_error::DENIED;
 		}
 
 		Openlink_result openlink(char const *path, bool /* create */,

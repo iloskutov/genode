@@ -304,8 +304,7 @@ struct Genode::Directory : Noncopyable, Interface
 			Vfs_handle *link_handle;
 
 			auto open_res = _nonconst_fs().openlink(
-				join(_path, rel_path).string(),
-				false, &link_handle, _alloc);
+				join(_path, rel_path).string(), &link_handle, _alloc);
 
 			if (open_res != Directory_service::OPENLINK_OK)
 				throw Nonexistent_file();
@@ -334,48 +333,15 @@ struct Genode::Directory : Noncopyable, Interface
 		 * This operation may fail. Its success can be checked by calling
 		 * 'symlink_exists'.
 		 */
-		void create_symlink(Path const &rel_path, Path const &target)
+		void create_symlink(Path const &rel_path, Path const &target, Vfs::Timestamp ts)
 		{
-			using namespace Vfs;
-			Vfs_handle *link_handle;
-
-			auto openlink_result = _nonconst_fs().openlink(
-				join(_path, rel_path).string(),
-				true, &link_handle, _alloc);
-
-			using Openlink_result = Directory_service::Openlink_result;
-
-			if (openlink_result == Openlink_result::OPENLINK_ERR_NODE_ALREADY_EXISTS)
-				openlink_result = _fs.openlink(
-					join(_path, rel_path).string(),
-					false, &link_handle, _alloc);
-
-			if (openlink_result != Openlink_result::OPENLINK_OK)
-				return;
-
-			Vfs_handle::Guard guard(link_handle);
-
-			Const_byte_range_ptr const src { target.string(), target.length() };
-
-			Vfs_handle::Write_result write_result = Vfs_handle::Write_error::DENIED;
-
 			for (;;) {
-				write_result = link_handle->write({ }, src);
-				if (write_result != Vfs_handle::Write_error::RETRY)
-					break;
+				Vfs::Symlink_result const result =
+					_nonconst_fs().symlink(join(_path, rel_path).string(),
+				                                target.string(), ts);
+				if (result != Vfs::Symlink_result::RETRY) break;
 				_io.commit_and_wait();
 			}
-
-			write_result.with_result([&] (size_t num_bytes) {
-				if (num_bytes < src.num_bytes) {
-					warning("failed to write complete symlink");
-					unlink(rel_path);
-				}
-			}, [&] (Vfs_handle::Write_error) { });
-
-			/* sync before the handle gets closed */
-			while (link_handle->sync() == Sync_result::RETRY)
-				_io.commit_and_wait();
 		}
 
 		void unlink(Path const &rel_path)

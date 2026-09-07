@@ -254,6 +254,22 @@ class Vfs_audit::File_system : public Vfs::File_system
 			return r;
 		}
 
+		Openlink_result openlink(const char *path, Vfs::Vfs_handle **out, Allocator &alloc) override
+		{
+			_log(__func__, " ", path);
+
+			Vfs_handle *audited = nullptr;
+			Openlink_result r = _fs.openlink(_expand(path).string(), &audited, alloc);
+
+			if (!audited || r != OPENLINK_OK)
+				return r;
+
+			try { *out = new (alloc) Handle(*this, alloc, 0777, path, _audit_log, *audited); }
+			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM;  }
+			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
+			return r;
+		}
+
 		Opendir_result opendir(char const *path, Allocator &alloc) override
 		{
 			_log(__func__, " ", path);
@@ -301,6 +317,12 @@ class Vfs_audit::File_system : public Vfs::File_system
 		{
 			_log(__func__, " ", path);
 			return _fs.mkdir(_expand(path).string(), ts);
+		}
+
+		Symlink_result symlink(char const *path, char const *target, Timestamp ts) override
+		{
+			_log(__func__, " ", path, " target: ", target);
+			return _fs.symlink(_expand(path).string(), target, ts);
 		}
 
 		unsigned num_dirent(const char *path) override

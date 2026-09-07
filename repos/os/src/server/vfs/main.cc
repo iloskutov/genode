@@ -551,8 +551,29 @@ class Vfs_server::Session_component : private Session_resources,
 				char const *name_str = name.string();
 				_assert_valid_name(name_str);
 
+				using Path = String<MAX_PATH_LEN>;
+				Path path = (dir.path == "/") ? Path { "/", name.string() }
+				                              : Path { dir.path, "/", name.string() };
+
+				bool const exists = _vfs_env.fs().dir_entry_exists(path.string());
+
+				if (!create && !exists)
+					throw Lookup_failed();
+
+				/* create symlink with intermediate empty target */
+				if (create && !exists) {
+					Symlink_result symlink_result;
+					for (;;) {
+						symlink_result = _vfs_env.fs().symlink(path.string(), "", { });
+						if (symlink_result != Symlink_result::RETRY) break;
+						_vfs_env.io().commit();
+						_ep.wait_and_dispatch_one_io_signal();
+					}
+					assert_symlink(symlink_result);
+				}
+
 				return Symlink_handle {
-					dir.symlink(_node_space, _vfs_env.fs(), _alloc, create, {
+					dir.symlink(_node_space, _vfs_env.fs(), _alloc, {
 						.path      = name_str,
 						.writeable = _writeable
 					}).value

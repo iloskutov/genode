@@ -115,14 +115,11 @@ class Vfs_symlink::File_system : public Single_file_system
 		Open_result open(char const *, unsigned, Vfs_handle **, Allocator&) override {
 			return OPEN_ERR_UNACCESSIBLE; }
 
-		Openlink_result openlink(char const *path, bool create,
-		                         Vfs_handle **out_handle, Allocator &alloc) override
+		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
+		                         Allocator &alloc) override
 		{
 			if (!_single_file(path))
 				return OPENLINK_ERR_LOOKUP_FAILED;
-
-			if (create)
-				return OPENLINK_ERR_NODE_ALREADY_EXISTS;
 
 			try {
 				*out_handle = new (alloc) Symlink_handle(*this, alloc);

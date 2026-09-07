@@ -724,8 +724,8 @@ class Vfs_tar::File_system : public Vfs::File_system
 			return Opendir_error::DENIED;
 		}
 
-		Openlink_result openlink(char const *path, bool /* create */,
-		                         Vfs_handle **out_handle, Allocator &alloc) override
+		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
+		                         Allocator &alloc) override
 		{
 			Node const *node = dereference(path);
 			if (!node || !node->record ||

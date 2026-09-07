@@ -410,7 +410,8 @@ struct Vfs_server::Symlink : Io_node
 {
 	private:
 
-		Vfs::Vfs_handle &_handle;
+		Vfs::File_system &_vfs;
+		Vfs::Vfs_handle  &_handle;
 
 		using Write_buffer = String<MAX_PATH_LEN + 1>;
 
@@ -432,10 +433,10 @@ struct Vfs_server::Symlink : Io_node
 		}
 
 		static Vfs_handle &_open(Vfs::File_system  &vfs, Allocator &alloc,
-		                         char const *path, bool create)
+		                         char const *path)
 		{
 			Vfs_handle *h = nullptr;
-			assert_openlink(vfs.openlink(path, create, &h, alloc));
+			assert_openlink(vfs.openlink(path, &h, alloc));
 			return *h;
 		}
 
@@ -460,26 +461,18 @@ struct Vfs_server::Symlink : Io_node
 			 * to shared memory, the null-termination of the content of
 			 * '_write_buffer' does not depend on the goodwill of the client.
 			 */
-			Const_byte_range_ptr const src { _write_buffer.string(),
-			                                 _write_buffer.length() };
-			size_t out_count = 0;
-			_handle.write({ }, src).with_result(
-				[&] (size_t num_bytes) {
-					out_count = num_bytes;
-					_modified = true;
-				},
-				[&] (Vfs_handle::Write_error e) {
-					switch (e) {
-					case Vfs_handle::Write_error::RETRY:  break;
-					case Vfs_handle::Write_error::DENIED:
-						_ack_failed_packet(_payload_ptr); break;
-					}
-				});
-
-			if (out_count == src.num_bytes)
-				_ack_successful_packet(src.num_bytes, _payload_ptr);
-			else
+			switch (_vfs.symlink(path.string(), _write_buffer.string(), { })) {
+			case Vfs::Symlink_result::RETRY:
+				break;
+			case Vfs::Symlink_result::CREATED:
+			case Vfs::Symlink_result::UPDATED:
+				_ack_successful_packet(_write_buffer.length(), _payload_ptr);
+				_modified = true;
+				break;
+			case Vfs::Symlink_result::DENIED:
 				_ack_failed_packet(_payload_ptr);
+				break;
+			}
 		}
 
 	public:
@@ -487,11 +480,10 @@ struct Vfs_server::Symlink : Io_node
 		Symlink(Node_space       &space,
 		        Vfs::File_system &vfs,
 		        Allocator        &alloc,
-		        bool              create,
 		        Attr       const &attr)
 		:
 			Io_node(space, attr),
-			_handle(_open(vfs, alloc, attr.path.string(), create))
+			_vfs(vfs), _handle(_open(vfs, alloc, attr.path.string()))
 		{ }
 
 		~Symlink() { _handle.close(); }
@@ -909,10 +901,9 @@ struct Vfs_server::Directory : Io_node
 		Node_space::Id symlink(Node_space          &space,
 		                       Vfs::File_system    &vfs,
 		                       Allocator           &alloc,
-		                       bool                 create,
 		                       Symlink::Attr const &attr)
 		{
-			Symlink &link = *new (alloc) Symlink(space, vfs, alloc, create, {
+			Symlink &link = *new (alloc) Symlink(space, vfs, alloc, {
 				.path      = Path(attr.path.string(), Node_base::path.string()).string(),
 				.writeable = attr.writeable
 			});

@@ -32,6 +32,16 @@ namespace File_system {
 		} });
 	}
 
+	static inline void assert_symlink(Symlink_result r)
+	{
+		switch (r) {
+		case Symlink_result::DENIED:  throw Lookup_failed();
+		case Symlink_result::RETRY:   throw Lookup_failed();
+		case Symlink_result::CREATED: break;
+		case Symlink_result::UPDATED: break;
+		}
+	}
+
 	static inline void assert_mkdir(Mkdir_result r)
 	{
 		switch (r) {

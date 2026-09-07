@@ -1687,93 +1687,24 @@ void Libc::Fs::fsync(Open_file &of)
 
 int Libc::Fs::symlink(char const *target_path, const char *link_path)
 {
-	Vfs::Vfs_handle *handle_ptr = nullptr;
+	Vfs::Timestamp const mtime = timestamp_now(*this);
 
-	size_t const count = ::strlen(target_path) + 1;
+	bool succeeded    = false;
+	int  result_errno = 0;
 
-	{
-		bool succeeded { false };
-		int result_errno { 0 };
-		_monitor.monitor([&] {
+	_monitor.monitor([&] {
 
-			using Openlink_result = Vfs::Directory_service::Openlink_result;
+		switch (_vfs.symlink(link_path, target_path, mtime)) {
+		case Vfs::Symlink_result::RETRY:   return Fn::INCOMPLETE;
+		case Vfs::Symlink_result::CREATED: succeeded = true;     break;
+		case Vfs::Symlink_result::UPDATED: succeeded = true;     break;
+		case Vfs::Symlink_result::DENIED:  result_errno = EPERM; break;
+		}
+		return Fn::COMPLETE;
+	});
 
-			Openlink_result openlink_result =
-				_vfs.openlink(link_path, true, &handle_ptr, _kernel_heap);
-
-			switch (openlink_result) {
-			case Openlink_result::OPENLINK_ERR_LOOKUP_FAILED:
-				result_errno = ENOENT; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_ERR_NAME_TOO_LONG:
-				result_errno = ENAMETOOLONG; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_ERR_NODE_ALREADY_EXISTS:
-				result_errno = EEXIST; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_ERR_NO_SPACE:
-				result_errno = ENOSPC; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_ERR_OUT_OF_RAM:
-				result_errno = ENOSPC; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_ERR_OUT_OF_CAPS:
-				result_errno = ENOSPC; return Fn::COMPLETE;
-			case Vfs::Directory_service::OPENLINK_ERR_PERMISSION_DENIED:
-				result_errno = EPERM; return Fn::COMPLETE;
-			case Openlink_result::OPENLINK_OK:
-				break;
-			}
-
-			succeeded = true;
-			return Fn::COMPLETE;
-		});
-
-		if (!succeeded)
-			return Errno(result_errno);
-	}
-
-	Vfs::Vfs_handle &handle = *handle_ptr;
-	handle.handler(&_response_handler);
-
-	Vfs::Timestamp mtime = timestamp_now(*this);
-
-	{
-		Vfs::Vfs_handle::Write_result write_result = Vfs::Vfs_handle::Write_error::DENIED;
-
-		enum class Stage { WRITE, MTIME, SYNC } stage = Stage::WRITE;
-
-		_monitor.monitor([&] {
-
-			switch (stage) {
-
-			case Stage::WRITE:
-				write_result = handle.write({ }, { target_path, count });
-				if (write_result == Vfs::Vfs_handle::Write_error::RETRY)
-					return Fn::INCOMPLETE;
-				stage = Stage::MTIME;
-				[[fallthrough]];
-
-			case Stage::MTIME:
-				if (mtime.ms_since_1970 != 0) {
-					if (!handle.update_modification_timestamp(mtime))
-						return Fn::INCOMPLETE;
-				}
-				stage = Stage::SYNC;
-				[[fallthrough]];
-
-			case Stage::SYNC:
-				if (handle.sync() != Vfs::Sync_result::OK)
-					return Fn::INCOMPLETE;
-				handle.close();
-				break;
-			}
-
-			return Fn::COMPLETE;
-		});
-
-		bool const name_too_long = write_result.convert<bool>(
-			[&] (size_t num_bytes) { return (num_bytes != count); },
-			[&] (Vfs::Vfs_handle::Write_error) { return true; });
-
-		if (name_too_long)
-			return Errno(ENAMETOOLONG);
-	}
+	if (!succeeded)
+		return Errno(result_errno);
 
 	return 0;
 }
@@ -1799,7 +1730,7 @@ ssize_t Libc::Fs::readlink(const char *link_path, char *buf, ::size_t buf_size)
 				using Openlink_result = Vfs::Directory_service::Openlink_result;
 
 				Openlink_result openlink_result =
-					_vfs.openlink(link_path, false, &handle_ptr, _kernel_heap);
+					_vfs.openlink(link_path, &handle_ptr, _kernel_heap);
 
 				switch (openlink_result) {
 				case Openlink_result::OPENLINK_ERR_LOOKUP_FAILED:

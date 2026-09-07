@@ -131,6 +131,8 @@ namespace Genode::Vfs {
 
 	enum class Mkdir_result       { CREATED, UPDATED, RETRY, DENIED };
 
+	enum class Symlink_result     { CREATED, UPDATED, RETRY, DENIED };
+
 	enum class Read_ready_result  { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
 	enum class Write_ready_result { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };

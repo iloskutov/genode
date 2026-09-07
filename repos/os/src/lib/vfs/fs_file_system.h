@@ -174,6 +174,43 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 		Constructible<Mkdir_op> _mkdir_op { };
 
+		/**
+		 * State of current symlink operation, kept until mtime update is complete
+		 */
+		struct Symlink_op : private Open_fs_handle
+		{
+			File_system &_fs;
+
+			using Open_fs_handle::file_handle;
+
+			using Path = String<MAX_PATH_LEN>;
+			Path const path, target;
+
+			Symlink_result const result;
+
+			enum class State { PENDING, WRITTEN, MTIME_SUBMITTED, MTIME_ACKED };
+			State state = State::PENDING;
+
+			Symlink_op(File_system &fs, ::File_system::Symlink_handle h,
+			           Path const &p, Path const &t, Symlink_result result)
+			:
+				Open_fs_handle(fs._handle_space, h),
+				_fs(fs), path(p), target(t), result(result)
+			{ }
+
+			~Symlink_op() { _fs._fs.close(file_handle()); }
+
+			Handle_ack_result handle_ack(Packet_descriptor const &packet) override
+			{
+				if (packet.operation() == Packet_descriptor::WRITE_TIMESTAMP)
+					state = State::MTIME_ACKED;
+
+				return { .release_packet = true };
+			}
+		};
+
+		Constructible<Symlink_op> _symlink_op { };
+
 		template <typename RESULT, typename ERROR>
 		static RESULT _read(File_system &fs, ::File_system::File_handle const fh,
 		                    Queued_state      &queued_read_state,
@@ -832,6 +869,118 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return result;
 		}
 
+		Symlink_result symlink(char const *path, char const *target, Timestamp ts) override
+		{
+			/* cancel incomplete symlink operation if paths mismatch */
+			if (_symlink_op.constructed())
+				if (_symlink_op->path != path || _symlink_op->target != target)
+					_symlink_op.destruct();
+
+			Absolute_path abs_path(path);
+			abs_path.strip_last_element();
+
+			Absolute_path symlink_name(path);
+			symlink_name.keep_only_last_element();
+
+			if (!_symlink_op.constructed()) {
+
+				try {
+					::File_system::Dir_handle dir_handle = _fs.dir(abs_path.base(), false);
+
+					Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
+
+					bool already_exists = false;
+					Symlink_result result = Symlink_result::DENIED;
+					::File_system::Symlink_handle symlink { ~0u };
+
+					auto try_open_symlink = [&] (bool create)
+					{
+						try {
+							auto const &name_wo_slash = symlink_name.string() + 1;
+							symlink = _fs.symlink(dir_handle, name_wo_slash, create);
+							result  = create ? Symlink_result::CREATED
+							                 : Symlink_result::UPDATED;
+						}
+						catch (::File_system::Invalid_handle)      { }
+						catch (::File_system::Invalid_name)        { }
+						catch (::File_system::Lookup_failed)       { }
+						catch (::File_system::Node_already_exists) { already_exists = true; }
+						catch (::File_system::No_space)            { }
+						catch (::File_system::Permission_denied)   { }
+						catch (::File_system::Unavailable)         { }
+						catch (Out_of_ram)                         { }
+						catch (Out_of_caps)                        { }
+					};
+
+					try_open_symlink(true);
+					if (already_exists)
+						try_open_symlink(false);
+
+					bool const ok = (result == Symlink_result::CREATED)
+					             || (result == Symlink_result::UPDATED);
+					if (!ok)
+						return result;
+
+					_symlink_op.construct(*this, symlink, path, target, result);
+
+				} catch (...) { return Symlink_result::DENIED; }
+			}
+
+			/* _symlink_op is constructed at this point */
+
+			using ::File_system::Packet_descriptor;
+			using Tx = ::File_system::Session::Tx;
+
+			Tx::Source &source = *_fs.tx();
+
+			if (_symlink_op->state == Symlink_op::State::PENDING) {
+
+				/* check precondition for write operation */
+				if (!source.ready_to_submit())
+					return Symlink_result::RETRY;
+
+				try {
+					size_t const n = strlen(target);
+					Packet_descriptor packet_in(source.alloc_packet(n),
+					                            _symlink_op->file_handle(),
+					                            Packet_descriptor::WRITE,
+					                            n, 0);
+
+					memcpy(source.packet_content(packet_in), target, n);
+
+					_submit_packet(packet_in);
+					_symlink_op->state = Symlink_op::State::WRITTEN;
+				}
+				catch (Tx::Source::Packet_alloc_failed) { return Symlink_result::RETRY; }
+			}
+
+			if (_symlink_op->state == Symlink_op::State::WRITTEN) {
+
+				/* check precondition for mtime update operation */
+				if (!source.ready_to_submit())
+					return Symlink_result::RETRY;
+
+				/* update mtime */
+				try {
+					Packet_descriptor p(source.alloc_packet(0), _symlink_op->file_handle(),
+					                    Packet_descriptor::WRITE_TIMESTAMP,
+					                    ::File_system::Timestamp {
+					                       .ms_since_1970 = ts.ms_since_1970 });
+					_submit_packet(p);
+
+					_symlink_op->state = Symlink_op::State::MTIME_SUBMITTED;
+				}
+				catch (Tx::Source::Packet_alloc_failed) { return Symlink_result::RETRY; }
+			}
+
+			if (_symlink_op->state != Symlink_op::State::MTIME_ACKED)
+				return Symlink_result::RETRY;
+
+			Symlink_result const result = _symlink_op->result;
+			_symlink_op.destruct();
+			return result;
+		}
+
 		unsigned num_dirent(char const *path) override
 		{
 			if (strcmp(path, "") == 0)
@@ -943,8 +1092,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return error;
 		}
 
-		Openlink_result openlink(char const *path, bool create,
-		                         Vfs_handle **out_handle, Allocator &alloc) override
+		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
+		                         Allocator &alloc) override
 		{
 			/*
 			 * Canonicalize path (i.e., path must start with '/')
@@ -962,7 +1111,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
 
 				::File_system::Symlink_handle symlink_handle =
-				    _fs.symlink(dir_handle, symlink_name.base() + 1, create);
+				    _fs.symlink(dir_handle, symlink_name.base() + 1, false);
 
 				*out_handle = new (alloc)
 					Fs_vfs_symlink_handle(*this, alloc,
@@ -978,8 +1127,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			catch (::File_system::No_space)            { return OPENLINK_ERR_NO_SPACE; }
 			catch (::File_system::Permission_denied)   { return OPENLINK_ERR_PERMISSION_DENIED; }
 			catch (::File_system::Unavailable)         { return OPENLINK_ERR_LOOKUP_FAILED; }
-			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)                         { return OPENLINK_ERR_OUT_OF_RAM; }
+			catch (Out_of_caps)                        { return OPENLINK_ERR_OUT_OF_CAPS; }
 		}
 
 		void close(Vfs_handle *vfs_handle) override

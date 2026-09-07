@@ -185,7 +185,7 @@ struct Main
 						Vfs::Absolute_path bin_file_path { depot_component_path };
 						bin_file_path.keep_only_last_element();
 
-						component_dir.create_symlink(bin_file_path, depot_bin_path);
+						component_dir.create_symlink(bin_file_path, depot_bin_path, { });
 
 						/* create symlink to debug info file */
 
@@ -197,7 +197,7 @@ struct Main
 						Vfs::Absolute_path debug_file_path { depot_dbg_path };
 						debug_file_path.keep_only_last_element();
 
-						component_dir.create_symlink(debug_file_path, depot_dbg_path);
+						component_dir.create_symlink(debug_file_path, depot_dbg_path, { });
 					});
 				}, [&] () {
 					Genode::error("<route> node not found");

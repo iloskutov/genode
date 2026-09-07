@@ -95,7 +95,7 @@ struct Vfs_import::File_system : Vfs::File_system
 					log("retaining ", entry_path, " instead of importing symlink");
 				else {
 					try {
-						dst.create_symlink(entry_path, src.read_symlink(entry_path));
+						dst.create_symlink(entry_path, src.read_symlink(entry_path), { });
 					} catch (...) {
 						warning("failed to import symlink ", entry_path);
 					}

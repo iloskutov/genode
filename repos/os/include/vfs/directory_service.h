@@ -80,10 +80,9 @@ struct Genode::Vfs::Directory_service : Interface
 		OPENLINK_OK
 	};
 
-	virtual Openlink_result openlink(char const *path, bool create,
-	                                 Vfs_handle **, Allocator &)
+	virtual Openlink_result openlink(char const *path, Vfs_handle **, Allocator &)
 	{
-		(void)path; (void)create; return OPENLINK_ERR_PERMISSION_DENIED;
+		(void)path; return OPENLINK_ERR_PERMISSION_DENIED;
 	}
 
 	/**
@@ -178,6 +177,17 @@ struct Genode::Vfs::Directory_service : Interface
 	 * Return leaf path or nullptr if the path does not exist
 	 */
 	virtual bool dir_entry_exists(char const *path) { (void)path; return false; }
+
+	/**
+	 * Create symbolic link
+	 *
+	 * If the symlink already exists, its link target and modification time is
+	 * updated.
+	 */
+	virtual Symlink_result symlink(char const *path, char const *target, Timestamp)
+	{
+		(void)path; (void)target; return Symlink_result::DENIED;
+	}
 
 
 	/************

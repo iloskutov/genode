@@ -332,19 +332,9 @@ class Vfs_rump::File_system : public Vfs::File_system
 				return Read_error::DENIED;
 			}
 
-			Write_result write(At const at, Const_byte_range_ptr const &src) override
+			Write_result write(At const, Const_byte_range_ptr const &) override
 			{
-				if (at.pos != 0)
-					return Write_error::DENIED;
-
-				rump_sys_unlink(attr.path.base());
-
-				if (rump_sys_symlink(src.start, attr.path.base()) != 0)
-					return Write_error::DENIED;
-
-				_fs._parent_fs.notify_watchers(Span::from_cstring(attr.path.base()));
-
-				return src.num_bytes;
+				return Write_error::DENIED;
 			}
 		};
 
@@ -627,24 +617,9 @@ class Vfs_rump::File_system : public Vfs::File_system
 			return error;
 		}
 
-		Openlink_result openlink(char const *path, bool create,
+		Openlink_result openlink(char const *path,
 		                         Vfs_handle **handle, Allocator &alloc) override
 		{
-			bool const new_dir_entry = create && !dir_entry_exists(path);
-
-			if (create) {
-				if (rump_sys_symlink("", path) != 0) switch (errno) {
-				case EEXIST:       return OPENLINK_ERR_NODE_ALREADY_EXISTS;
-				case ENOENT:       return OPENLINK_ERR_LOOKUP_FAILED;
-				case ENOSPC:       return OPENLINK_ERR_NO_SPACE;
-				case EACCES:       return OPENLINK_ERR_PERMISSION_DENIED;
-				case ENAMETOOLONG: return OPENLINK_ERR_NAME_TOO_LONG;
-				default:
-					error(__func__, ": unhandled rump error ", errno);
-					return OPENLINK_ERR_PERMISSION_DENIED;
-				}
-			}
-
 			char dummy;
 			if (rump_sys_readlink(path, &dummy, sizeof(dummy)) == -1) switch(errno) {
 				case ENOENT: return OPENLINK_ERR_LOOKUP_FAILED;
@@ -657,7 +632,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 				*handle = new (alloc) Rump_vfs_symlink_handle(*this, alloc, 0777, {
 					.path          = { path },
 					.fd            = -1,
-					.new_dir_entry = new_dir_entry
+					.new_dir_entry = false
 				});
 				return OPENLINK_OK;
 			}
@@ -773,6 +748,33 @@ class Vfs_rump::File_system : public Vfs::File_system
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
 			return new_dir_entry ? Mkdir_result::CREATED : Mkdir_result::UPDATED;
+		}
+
+		Symlink_result symlink(char const *path, char const *target, Timestamp) override
+		{
+			if (strlen(path) == 0)
+				path = "/";
+
+			bool const new_dir_entry = !dir_entry_exists(path);
+
+			if (!new_dir_entry) {
+				struct stat s { };
+				rump_sys_lstat(path, &s);
+				if (!S_ISLNK(s.st_mode))
+					return Symlink_result::DENIED;
+
+				rump_sys_unlink(path);
+			}
+
+			if (rump_sys_symlink(target, path) != 0)
+				return Symlink_result::DENIED;
+
+			_parent_fs.notify_watchers(Span::from_cstring(path));
+			if (new_dir_entry)
+				_notify_compound_dir_watchers(path);
+
+			return new_dir_entry ? Symlink_result::CREATED
+			                     : Symlink_result::UPDATED;
 		}
 };
 

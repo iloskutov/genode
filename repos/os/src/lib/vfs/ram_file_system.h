@@ -54,7 +54,7 @@ namespace Vfs_ram {
 
 	class Node;
 	class File;
-	class Symlink;
+	struct Symlink;
 	class Directory;
 	class File_system;
 }
@@ -323,45 +323,22 @@ class Vfs_ram::File : public Vfs_ram::Node
 };
 
 
-class Vfs_ram::Symlink : public Vfs_ram::Node
+struct Vfs_ram::Symlink : Vfs_ram::Node
 {
-	private:
+	using Target = String<MAX_PATH_LEN>;
 
-		char   _target[MAX_PATH_LEN];
-		size_t _len = 0;
+	Target target { };
 
-	public:
+	Symlink(char const *name) : Node(name) { }
 
-		Symlink(char const *name) : Node(name) { }
+	size_t length() override { return strlen(target.string()); }
 
-		size_t length() override { return _len; }
-
-		Read_result read(Byte_range_ptr const &dst, Seek) override
-		{
-			size_t n = min(dst.num_bytes, _len);
-			memcpy(dst.start, _target, n);
-			return n;
-		}
-
-		size_t write(Const_byte_range_ptr const &src, Seek) override
-		{
-			if (src.num_bytes > MAX_PATH_LEN)
-				return 0;
-
-			size_t len = src.num_bytes;
-
-			for (size_t i = 0; i < len; ++i) {
-				if (src.start[i] == '\0') {
-					len = i + 1; /* number of characters + terminating zero */
-					break;
-				}
-			}
-
-			_len = len;
-			memcpy(_target, src.start, _len);
-
-			return len;
-		}
+	Read_result read(Byte_range_ptr const &dst, Seek) override
+	{
+		size_t n = min(dst.num_bytes, strlen(target.string()));
+		memcpy(dst.start, target.string(), n);
+		return n;
+	}
 };
 
 
@@ -648,7 +625,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 			return Opendir_error::DENIED;
 		}
 
-		Openlink_result openlink(char const * const path, bool create,
+		Openlink_result openlink(char const * const path,
 		                         Vfs_handle **handle, Allocator &alloc) override
 		{
 			Directory * const parent = lookup_parent(path);
@@ -657,31 +634,12 @@ class Vfs_ram::File_system : public Vfs::File_system
 
 			char const * const name = basename(path);
 
-			Symlink *link;
-
 			Node * const node = parent->child(name);
+			if (!node)
+				return OPENLINK_ERR_LOOKUP_FAILED;
 
-			if (create) {
-
-				if (node)
-					return OPENLINK_ERR_NODE_ALREADY_EXISTS;
-
-				if (strlen(name) >= MAX_NAME_LEN)
-					return OPENLINK_ERR_NAME_TOO_LONG;
-
-				try { link = new (_env.alloc()) Symlink(name); }
-				catch (Out_of_memory) { return OPENLINK_ERR_NO_SPACE; }
-
-				parent->adopt(link);
-				_notify_compound_dir_watchers(path);
-			} else {
-
-				if (!node)
-					return OPENLINK_ERR_LOOKUP_FAILED;
-
-				link = dynamic_cast<Symlink *>(node);
-				if (!link) return OPENLINK_ERR_LOOKUP_FAILED;
-			}
+			Symlink *link = dynamic_cast<Symlink *>(node);
+			if (!link) return OPENLINK_ERR_LOOKUP_FAILED;
 
 			try {
 				Io_handle * const io_handle_ptr = new (alloc)
@@ -689,19 +647,9 @@ class Vfs_ram::File_system : public Vfs::File_system
 				link->open(*io_handle_ptr);
 				*handle = io_handle_ptr;
 				return OPENLINK_OK;
-			} catch (Out_of_ram) {
-				if (create) {
-					parent->release(link);
-					remove(link);
-				}
-				return OPENLINK_ERR_OUT_OF_RAM;
-			} catch (Out_of_caps) {
-				if (create) {
-					parent->release(link);
-					remove(link);
-				}
-				return OPENLINK_ERR_OUT_OF_CAPS;
 			}
+			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM; }
+			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
 		}
 
 		void close(Vfs_handle *vfs_handle) override
@@ -851,6 +799,42 @@ class Vfs_ram::File_system : public Vfs::File_system
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
 			return Mkdir_result::CREATED;
+		}
+
+		Symlink_result symlink(char const *path, char const *target, Timestamp ts) override
+		{
+			Directory * const parent = lookup_parent(path);
+			if (!parent)
+				return Symlink_result::DENIED;
+
+			char const * const name = basename(path);
+			if (strlen(name) >= MAX_NAME_LEN)
+				return Symlink_result::DENIED;
+
+			if (strlen(target) > MAX_PATH_LEN)
+				return Symlink_result::DENIED;
+
+			if (*name == '\0')
+				return Symlink_result::DENIED;
+
+			if (Node * node = lookup(path)) {
+				/* update target and timestamp of existing symlink */
+				if (Symlink *symlink = dynamic_cast<Symlink*>(node)) {
+					symlink->target = target;
+					symlink->update_modification_timestamp(ts);
+					return Symlink_result::UPDATED;
+				}
+				return Symlink_result::DENIED; /* conflict with file or dir */
+			}
+
+			Symlink &symlink = *new (_env.alloc()) Symlink(name);
+			parent->adopt(&symlink);
+			symlink.target = target;
+			symlink.update_modification_timestamp(ts);
+
+			_notify_watchers(path);
+			_notify_compound_dir_watchers(path);
+			return Symlink_result::CREATED;
 		}
 
 		Dataspace_capability dataspace(char const * const path) override

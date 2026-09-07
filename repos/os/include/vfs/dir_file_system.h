@@ -243,15 +243,15 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				[&] () -> Opendir_result { return Opendir_error::DENIED; });
 		}
 
-		Openlink_result openlink(char const *path, bool create,
-		                         Vfs_handle **out, Allocator &alloc) override
+		Openlink_result openlink(char const *path, Vfs_handle **out,
+		                         Allocator &alloc) override
 		{
 			if (_slash(path))
 				return OPENLINK_ERR_PERMISSION_DENIED; /* cannot open dir as link */
 
 			return _with_sub_path(path,
 				[&] (auto const &path) {
-					return _union.openlink(path, create, out, alloc);
+					return _union.openlink(path, out, alloc);
 				},
 				[&] () -> Openlink_result { return OPENLINK_ERR_LOOKUP_FAILED; });
 		}
@@ -314,6 +314,16 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 			return _with_sub_path(path,
 				[&] (auto const &path) { return _union.mkdir(path, ts); },
 				[&] () -> Mkdir_result { return Mkdir_result::DENIED; });
+		}
+
+		Symlink_result symlink(char const *path, char const *target, Timestamp ts) override
+		{
+			if (_slash(path))
+				return Symlink_result::DENIED;
+
+			return _with_sub_path(path,
+				[&] (auto const &path)   { return _union.symlink(path, target, ts); },
+				[&] () -> Symlink_result { return Symlink_result::DENIED; });
 		}
 
 		Progress update(Node const &node, Factory &factory) override

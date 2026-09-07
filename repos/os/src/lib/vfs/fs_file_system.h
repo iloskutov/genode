@@ -152,11 +152,15 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			using Path = String<MAX_PATH_LEN>;
 			Path const path;
 
+			Mkdir_result const result;
+
 			bool acked = false;
 
-			Mkdir_op(File_system &fs, ::File_system::Dir_handle h, Path const &p)
+			Mkdir_op(File_system &fs, ::File_system::Dir_handle h, Path const &p,
+			         Mkdir_result result)
 			:
-				Open_fs_handle(fs._handle_space, h), _fs(fs), path(p)
+				Open_fs_handle(fs._handle_space, h),
+				_fs(fs), path(p), result(result)
 			{ }
 
 			~Mkdir_op() { _fs._fs.close(file_handle()); }
@@ -784,22 +788,25 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				{
 					try {
 						dir = _fs.dir(dir_path.base(), create);
-						result = Mkdir_result::OK;
+						result  = create ? Mkdir_result::CREATED
+						                 : Mkdir_result::UPDATED;
 					}
 					catch (::File_system::Lookup_failed)       { }
 					catch (::File_system::Name_too_long)       { }
 					catch (::File_system::Node_already_exists) { already_exists = true; }
 					catch (::File_system::No_space)            { }
 					catch (::File_system::Permission_denied)   { }
-					catch (Out_of_ram)                         { result = Mkdir_result::OUT_OF_RAM; }
-					catch (Out_of_caps)                        { result = Mkdir_result::OUT_OF_CAPS; }
+					catch (Out_of_ram)                         { }
+					catch (Out_of_caps)                        { }
 				};
 
 				try_open_dir(true);
 				if (already_exists)
 					try_open_dir(false);
 
-				if (result != Mkdir_result::OK)
+				bool const ok = (result == Mkdir_result::CREATED)
+				             || (result == Mkdir_result::UPDATED);
+				if (!ok)
 					return result;
 
 				/* update mtime */
@@ -812,7 +819,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				}
 				catch (Tx::Source::Packet_alloc_failed) { result = Mkdir_result::RETRY; }
 
-				_mkdir_op.construct(*this, dir, path);
+				_mkdir_op.construct(*this, dir, path, result);
 			}
 
 			/* '_mkdir_op' cannot be unconstructed at this point */
@@ -820,8 +827,9 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			if (!_mkdir_op->acked)
 				return Mkdir_result::RETRY;
 
+			Mkdir_result const result = _mkdir_op->result;
 			_mkdir_op.destruct();
-			return Mkdir_result::OK;
+			return result;
 		}
 
 		unsigned num_dirent(char const *path) override

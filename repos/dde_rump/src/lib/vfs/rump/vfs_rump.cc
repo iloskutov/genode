@@ -772,7 +772,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 			}
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
-			return Mkdir_result::OK;
+			return new_dir_entry ? Mkdir_result::CREATED : Mkdir_result::UPDATED;
 		}
 };
 

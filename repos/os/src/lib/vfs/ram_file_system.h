@@ -828,13 +828,13 @@ class Vfs_ram::File_system : public Vfs::File_system
 				return Mkdir_result::DENIED;
 
 			if (*name == '\0')
-				return Mkdir_result::OK; /* already exists */
+				return Mkdir_result::UPDATED; /* already exists */
 
 			if (Node * node = lookup(path)) {
 				/* update timestamp of existing directory */
 				if (Directory *dir = dynamic_cast<Directory*>(node)) {
 					dir->update_modification_timestamp(ts);
-					return Mkdir_result::OK;
+					return Mkdir_result::UPDATED;
 				}
 				return Mkdir_result::DENIED; /* conflict with file or symlink */
 			}
@@ -850,7 +850,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
-			return Mkdir_result::OK;
+			return Mkdir_result::CREATED;
 		}
 
 		Dataspace_capability dataspace(char const * const path) override

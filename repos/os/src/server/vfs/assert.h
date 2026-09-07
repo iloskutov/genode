@@ -36,10 +36,9 @@ namespace File_system {
 	{
 		switch (r) {
 		case Mkdir_result::DENIED:       throw Lookup_failed();
-		case Mkdir_result::OUT_OF_RAM:   throw Out_of_ram();
-		case Mkdir_result::OUT_OF_CAPS:  throw Out_of_caps();
 		case Mkdir_result::RETRY:        throw Lookup_failed();
-		case Mkdir_result::OK:           break;
+		case Mkdir_result::CREATED:      break;
+		case Mkdir_result::UPDATED:      break;
 		}
 	}
 

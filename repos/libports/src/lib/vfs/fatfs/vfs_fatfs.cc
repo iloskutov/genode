@@ -616,9 +616,9 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 		{
 			FRESULT res = f_mkdir((const TCHAR*)path);
 			if (res != FR_OK)
-				return (res == FR_EXIST) ? Mkdir_result::OK
+				return (res == FR_EXIST) ? Mkdir_result::UPDATED
 				                         : Mkdir_result::DENIED;
-			return Mkdir_result::OK;
+			return Mkdir_result::CREATED;
 		}
 };
 

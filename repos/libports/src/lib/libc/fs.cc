@@ -397,7 +397,8 @@ int Libc::Fs::mkdir(const char *path, mode_t mode)
 		if (mkdir_result == Vfs::Mkdir_result::RETRY)
 			return Fn::INCOMPLETE;
 
-		if (mkdir_result == Vfs::Mkdir_result::OK)
+		if (mkdir_result == Vfs::Mkdir_result::CREATED
+		 || mkdir_result == Vfs::Mkdir_result::UPDATED)
 			result = 0;
 		else
 			result_errno = EPERM;

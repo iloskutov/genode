@@ -309,7 +309,7 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 		Mkdir_result mkdir(char const *path, Timestamp ts) override
 		{
 			if (_slash(path))
-				return Mkdir_result::OK;
+				return Mkdir_result::UPDATED;
 
 			return _with_sub_path(path,
 				[&] (auto const &path) { return _union.mkdir(path, ts); },

@@ -129,7 +129,7 @@ namespace Genode::Vfs {
 
 	enum class Write_mtime_result { OK,  RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
-	enum class Mkdir_result       { OK,  RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
+	enum class Mkdir_result       { CREATED, UPDATED, RETRY, DENIED };
 
 	enum class Read_ready_result  { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 

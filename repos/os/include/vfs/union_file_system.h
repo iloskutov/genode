@@ -482,7 +482,7 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 		Mkdir_result mkdir(char const *path, Timestamp ts) override
 		{
 			if (_top_dir(path))
-				return Mkdir_result::OK;
+				return Mkdir_result::UPDATED;
 
 			Mkdir_result result = Mkdir_result::DENIED;
 			_for_each_fs([&] (Fs &fs) {

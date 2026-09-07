@@ -70,11 +70,10 @@ inline void assert_mkdir(Vfs::Mkdir_result r)
 {
 	using Result = Vfs::Mkdir_result;
 	switch (r) {
-	case Result::OK: return;
-	case Result::DENIED:      error("Mkdir_result::DENIED");      break;
-	case Result::OUT_OF_RAM:  error("Mkdir_result::OUT_OF_RAM");  break;
-	case Result::OUT_OF_CAPS: error("Mkdir_result::OUT_OF_CAPS"); break;
-	case Result::RETRY:       error("Mkdir_result::RETRY");       break;
+	case Result::CREATED:
+	case Result::UPDATED: return;
+	case Result::DENIED:  error("Mkdir_result::DENIED"); break;
+	case Result::RETRY:   error("Mkdir_result::RETRY");  break;
 	}
 	throw Exception();
 }

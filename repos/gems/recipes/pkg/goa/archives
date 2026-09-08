@@ -14,7 +14,6 @@ _/src/gui_fb
 _/src/init
 _/src/libc
 _/src/libiconv
-_/src/libssh
 _/src/ncurses
 _/src/nic_router
 _/src/nitpicker

@@ -690,7 +690,7 @@
 /* #undef USE_WOLFSSL */
 
 /* if libSSH is in use */
-#define USE_LIBSSH 1
+/* #undef USE_LIBSSH */
 
 /* if libSSH2 is in use */
 /* #undef USE_LIBSSH2 */

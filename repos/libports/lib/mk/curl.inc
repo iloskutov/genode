@@ -137,8 +137,6 @@ SRC_C = \
 	version.c \
 	vquic/curl_ngtcp2.c \
 	vquic/curl_quiche.c \
-	vssh/libssh.c \
-	vssh/libssh2.c \
 	vtls/hostcheck.c \
 	vtls/keylog.c \
 	vtls/openssl.c \
@@ -152,7 +150,7 @@ SRC_C = \
 
 CC_OPT += -DHAVE_CONFIG_H -DBUILDING_LIBCURL=1
 
-LIBS += libc zlib libssl1 libssh
+LIBS += libc zlib libssl1
 
 include $(call select_from_repositories,lib/import/import-curl.mk)
 

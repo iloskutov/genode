@@ -7,7 +7,6 @@ _/src/fs_rom
 _/src/fs_tool
 _/src/fetchurl
 _/src/libc
-_/src/libssh
 _/src/openssl
 _/src/vfs
 _/src/zlib

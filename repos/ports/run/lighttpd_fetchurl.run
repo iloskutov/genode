@@ -5,7 +5,7 @@
 #
 
 assert {![have_board virt_qemu_riscv]} \
-	"Run script is not supported on this platform (missing curl and libssh)."
+	"Run script is not supported on this platform (missing curl)."
 
 proc ip_stack      { } { return lwip }
 proc download_size { } { return "1M" }
@@ -20,7 +20,6 @@ import_from_depot [depot_user]/src/[base_src] \
                   [depot_user]/src/nic_router \
                   [depot_user]/src/report_rom \
                   [depot_user]/src/libc \
-                  [depot_user]/src/libssh \
                   [depot_user]/src/lighttpd \
                   [depot_user]/src/fetchurl \
                   [depot_user]/src/curl \

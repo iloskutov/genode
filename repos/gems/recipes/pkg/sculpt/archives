@@ -35,7 +35,6 @@ _/src/vfs_ram_log
 _/src/chroot
 _/src/fetchurl
 _/src/curl
-_/src/libssh
 _/src/zlib
 _/src/log_core
 _/src/part_block

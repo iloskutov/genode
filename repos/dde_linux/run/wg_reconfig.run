@@ -19,7 +19,6 @@ assert {[have_spec arm_v8a] || [have_spec x86_64]}
 create_boot_directory
 
 import_from_depot [depot_user]/src/libc \
-                  [depot_user]/src/libssh \
                   [depot_user]/src/lighttpd \
                   [depot_user]/src/openssl \
                   [depot_user]/src/pcre \

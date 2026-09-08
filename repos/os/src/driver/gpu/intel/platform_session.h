@@ -120,6 +120,8 @@ class Platform::Device_component : public Rpc_object<Device_interface,
 		Range                    _gmadr_range;
 		Irq_session_component    _irq;
 
+		bool _msi_acquired { };
+
 	public:
 
 		Device_component(Env                  &env,
@@ -153,10 +155,28 @@ class Platform::Device_component : public Rpc_object<Device_interface,
 			return _irq.cap();
 		}
 
-		Alloc_msi_result alloc_msi(Signal_context_capability, bool) {
-			return Alloc_error::DENIED; }
+		Alloc_msi_result alloc_msi(Signal_context_capability sigh, bool)
+		{
+			/* impl. supports 1 MSI/MSI-X solely, deny further attempts */
+			if (_msi_acquired) {
+				error("Multiple MSI/MSI-X allocations not supported");
+				return Alloc_error::DENIED;
+			}
 
-		void free_msi(Msi_handle) { }
+			_irq.sigh(sigh);
+
+			_msi_acquired = true;
+
+			struct Msi_handle msi_handle { };
+
+			return Alloc_msi_result(msi_handle);
+		}
+
+		void free_msi(Msi_handle)
+		{
+			_irq.sigh({ });
+			_msi_acquired = false;
+		}
 
 		Io_mem_session_capability io_mem(unsigned idx, Range &range)
 		{
@@ -296,31 +316,9 @@ class Platform::Session_component : public Rpc_object<Session>,
 				}
 
 				g.node("device", [&]() {
-						/*
-						 * Only copy name and type and omit msi/msi_x attributes
-						 * to force usage of GSI in intel_fb.
-						 */
-						dev.for_each_attribute([&] (Node::Attribute const &attr) {
-							if (attr.name == "name" || attr.name == "type") {
-								using Value = String<64>;
-								Value value { Cstring(attr.value.start, attr.value.num_bytes) };
-								g.attribute(attr.name.string(), value);
-							}
-						});
-
-					/*
-					 * Generate an artifical irq node for systems that might
-					 * only announce msi (noticed with an Arrow Lake machine).
-					 */
-					dev.with_sub_node("irq",
-						[&] (Node const &node) { copy_node(g, node); },
-						[&] { g.node("irq", [&]() { g.attribute("number", 42u); }); });
+					copy_attributes(g, dev);
 
 					dev.for_each_sub_node([&] (Node const &node) {
-
-						/* handled above */
-						if (node.has_type("irq"))
-							return;
 
 						if (!node.has_type("io_mem")) {
 							copy_node(g, node);

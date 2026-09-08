@@ -9,7 +9,7 @@ import_from_depot [depot_user]/src/[base_src] \
                   [depot_user]/src/bsd_audio \
                   [depot_user]/src/init \
                   [depot_user]/src/pci_decode \
-                  [depot_user]/src/platform \
+                  [depot_user]/src/pc_platform \
                   [depot_user]/src/record_play_mixer \
                   [depot_user]/src/report_rom
 
@@ -37,33 +37,39 @@ config | verbose: yes | prio_levels: 4
 + start timer | priority: 0
   + provides | + service Timer
 
-+ start report_rom | ram: 2M
++ start drivers_reports | ram: 2M
+  + binary report_rom
   + provides
     + service Report
     + service ROM
   + config | verbose: no
-    + policy | label:  pci_decode -> system | report: acpi -> acpi
-    + policy | label:  platform -> devices  | report: pci_decode -> devices
+    + policy | label: pci_decode -> system     | report: acpi -> acpi
+    + policy | label: platform -> devices      | report: pci_decode -> devices
+    + policy | label: platform -> system       | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
 
 + start acpi | caps: 350 | ram: 8M | priority: -1
   + route
-    + service Report | + child report_rom
+    + service Report | + child drivers_reports
     + any-service    | + parent
 
 + start pci_decode | caps: 350 | ram: 2M | priority: -1
   + route
-    + service ROM    | label: system | + child report_rom
-    + service Report                 | + child report_rom
-    + any-service                    | + parent
+    + service ROM  | label: system | + child drivers_reports
+    + service Report               | + child drivers_reports
+    + any-service                  | + parent
 
-+ start platform | caps: 100 | managing_system: yes | priority: -1
++ start platform | caps: 110 | ram: 2M | managing_system: yes | priority: -1
+  + binary pc_platform
   + provides
     + service Dma
     + service Platform
   + route
-    + service ROM   | label: devices | + child report_rom
-    + service Timer                  | + child timer
-    + any-service                    | + parent
+    + service ROM | label: devices      | + child drivers_reports
+    + service ROM | label: system       | + child drivers_reports
+    + service ROM | label: sleep_states | + child drivers_reports
+    + service Timer                     | + child timer
+    + any-service                       | + parent
   + config
     + policy | label: audio ->
       + pci | class: AUDIO
@@ -75,8 +81,8 @@ config | verbose: yes | prio_levels: 4
     + service Report
     + service ROM
   + config | verbose: yes
-    + policy | label:  pci_decode -> system | report: acpi -> acpi
-    + policy | label:  platform -> devices  | report: pci_decode -> devices
+    + policy | label: audio_mixer | report: audio -> mixer
+    + policy | label: mixer_state | report: mixer -> state
 
 + start audio | caps: 150 | ram: 2M | priority: -1
   + binary pci_audio

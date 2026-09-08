@@ -204,7 +204,7 @@ class Genode::Packet_descriptor_queue
 			if (full()) return false;
 
 			_queue[_head%QUEUE_SIZE] = packet;
-			_head = (_head + 1)%QUEUE_SIZE;
+			__atomic_store_n(&_head, (_head + 1)%QUEUE_SIZE, __ATOMIC_SEQ_CST);
 			return true;
 		}
 
@@ -216,7 +216,7 @@ class Genode::Packet_descriptor_queue
 		PACKET_DESCRIPTOR get()
 		{
 			PACKET_DESCRIPTOR packet = _queue[_tail%QUEUE_SIZE];
-			_tail = (_tail + 1)%QUEUE_SIZE;
+			__atomic_store_n(&_tail, (_tail + 1)%QUEUE_SIZE, __ATOMIC_SEQ_CST);
 			return packet;
 		}
 

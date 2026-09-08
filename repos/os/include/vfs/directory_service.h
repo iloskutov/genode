@@ -68,23 +68,6 @@ struct Genode::Vfs::Directory_service : Interface
 		(void)path; return Opendir_error::DENIED;
 	}
 
-	enum Openlink_result
-	{
-		OPENLINK_ERR_LOOKUP_FAILED,
-		OPENLINK_ERR_NAME_TOO_LONG,
-		OPENLINK_ERR_NODE_ALREADY_EXISTS,
-		OPENLINK_ERR_NO_SPACE,
-		OPENLINK_ERR_OUT_OF_RAM,
-		OPENLINK_ERR_OUT_OF_CAPS,
-		OPENLINK_ERR_PERMISSION_DENIED,
-		OPENLINK_OK
-	};
-
-	virtual Openlink_result openlink(char const *path, Vfs_handle **, Allocator &)
-	{
-		(void)path; return OPENLINK_ERR_PERMISSION_DENIED;
-	}
-
 	/**
 	 * Close handle resources and deallocate handle
 	 *
@@ -187,6 +170,22 @@ struct Genode::Vfs::Directory_service : Interface
 	virtual Symlink_result symlink(char const *path, char const *target, Timestamp)
 	{
 		(void)path; (void)target; return Symlink_result::DENIED;
+	}
+
+	/**
+	 * De-reference symlink
+	 *
+	 * \return index of de-referenced path element, starting at index 0
+	 *
+	 * If the returned value equals the number of path elements, the path
+	 * does not contain a symlink.
+	 *
+	 * If a symlink was deferenced, the 'dst' buffer contains the symlink's
+	 * target, including a null termination.
+	 */
+	virtual Follow_result follow(char const *path, Byte_range_ptr const &dst)
+	{
+		(void)path; (void)dst;return Follow_error::DENIED;
 	}
 
 

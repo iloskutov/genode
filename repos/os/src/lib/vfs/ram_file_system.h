@@ -332,13 +332,6 @@ struct Vfs_ram::Symlink : Vfs_ram::Node
 	Symlink(char const *name) : Node(name) { }
 
 	size_t length() override { return strlen(target.string()); }
-
-	Read_result read(Byte_range_ptr const &dst, Seek) override
-	{
-		size_t n = min(dst.num_bytes, strlen(target.string()));
-		memcpy(dst.start, target.string(), n);
-		return n;
-	}
 };
 
 
@@ -625,33 +618,6 @@ class Vfs_ram::File_system : public Vfs::File_system
 			return Opendir_error::DENIED;
 		}
 
-		Openlink_result openlink(char const * const path,
-		                         Vfs_handle **handle, Allocator &alloc) override
-		{
-			Directory * const parent = lookup_parent(path);
-			if (!parent)
-				return OPENLINK_ERR_LOOKUP_FAILED;
-
-			char const * const name = basename(path);
-
-			Node * const node = parent->child(name);
-			if (!node)
-				return OPENLINK_ERR_LOOKUP_FAILED;
-
-			Symlink *link = dynamic_cast<Symlink *>(node);
-			if (!link) return OPENLINK_ERR_LOOKUP_FAILED;
-
-			try {
-				Io_handle * const io_handle_ptr = new (alloc)
-					Io_handle(*this, *this, alloc, Io_handle::STATUS_RDWR, *link, path);
-				link->open(*io_handle_ptr);
-				*handle = io_handle_ptr;
-				return OPENLINK_OK;
-			}
-			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
-		}
-
 		void close(Vfs_handle *vfs_handle) override
 		{
 			Io_handle * const ram_handle =
@@ -835,6 +801,26 @@ class Vfs_ram::File_system : public Vfs::File_system
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
 			return Symlink_result::CREATED;
+		}
+
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
+		{
+			if (!dst.num_bytes) /* no space for null-termination */
+				return Follow_error::DENIED;
+
+			return follow_path(Span::from_cstring(path),
+				[&] (auto const &partial_path) {
+					return dynamic_cast<Symlink *>(lookup(partial_path.string()));
+				},
+				[&] (Path_elem const elem, auto const &partial_path) {
+					Symlink &symlink = *dynamic_cast<Symlink *>(lookup(partial_path.string()));
+					symlink.target.with_span([&] (Span const &src) {
+						size_t n = min(dst.num_bytes,
+						               src.num_bytes + 1 /* null termination */);
+						copy_cstring(dst.start, src.start, n);
+					});
+					return elem;
+				});
 		}
 
 		Dataspace_capability dataspace(char const * const path) override

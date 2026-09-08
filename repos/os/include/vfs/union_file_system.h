@@ -418,21 +418,6 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 		}
 
-		Openlink_result openlink(char const *path,
-		                         Vfs_handle **out_handle,
-		                         Allocator &alloc) override
-		{
-			auto openlink_fn = [&] (File_system &fs, char const *path)
-			{
-				return fs.openlink(path, out_handle, alloc);
-			};
-
-			return _dir_op(OPENLINK_ERR_LOOKUP_FAILED,
-			               OPENLINK_ERR_PERMISSION_DENIED,
-			               OPENLINK_OK,
-			               path, openlink_fn);
-		}
-
 		void close(Vfs_handle *handle) override
 		{
 			if (handle && (&handle->ds() == this))
@@ -500,6 +485,18 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			_for_each_fs([&] (Fs &fs) {
 				if (result == Symlink_result::DENIED)
 					result = fs.symlink(path, target, ts); });
+			return result;
+		}
+
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
+		{
+			if (_top_dir(path))
+				return Path_elem { 0 };
+
+			Follow_result result = Follow_error::DENIED;
+			_for_each_fs([&] (Fs &fs) {
+				if (result == Follow_error::DENIED || result == Follow_error::NO_SYMLINK)
+					result = fs.follow(path, dst); });
 			return result;
 		}
 

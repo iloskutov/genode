@@ -111,6 +111,13 @@ namespace Genode::Vfs {
 		if (n) fn(Span(s, n));
 	}
 
+	static inline void for_each_path_elem(Span const &path, auto const &fn)
+	{
+		path.split('/', [&] (Span const &elem) {
+			if (elem.num_bytes)
+				fn(elem); });
+	}
+
 	using Watch_result = Attempt<Ok, Alloc_error>;
 
 	enum class Write_error { RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
@@ -132,6 +139,56 @@ namespace Genode::Vfs {
 	enum class Mkdir_result       { CREATED, UPDATED, RETRY, DENIED };
 
 	enum class Symlink_result     { CREATED, UPDATED, RETRY, DENIED };
+
+	struct Path_elem
+	{
+		unsigned index;
+
+		/**
+		 * Return true if index matches last 'path' element
+		 */
+		bool last(Span const &path) const
+		{
+			unsigned total = 0;
+			for_each_path_elem(path, [&] (Span const &) { total++; });
+			return (index + 1) == total;
+		}
+	};
+
+	enum class Follow_error { RETRY, NO_SYMLINK, DENIED };
+
+	using Follow_result = Attempt<Path_elem, Follow_error>;
+
+	/**
+	 * Walk path in search of the first 'Path_elem' that satisfies 'cond_fn'
+	 *
+	 * The functor 'fn' is called for the first matching partial path.
+	 * If 'cond_fn' never applies, NO_SYMLINK is returned.
+	 */
+	static inline Follow_result follow_path(Span const &path,
+	                                        auto const &cond_fn, auto const &fn)
+	{
+		String<MAX_PATH_LEN> partial_path { "" };
+		Path_elem path_elem { };
+		bool found = false;
+
+		for_each_path_elem(path, [&] (Span const &elem) {
+			if (found)
+				return;
+
+			partial_path = { partial_path, "/", elem };
+			if (cond_fn(partial_path)) {
+				found = true;
+				return;
+			}
+			path_elem.index++;
+		});
+
+		if (found)
+			return fn(path_elem, partial_path);
+
+		return Follow_error::NO_SYMLINK;
+	}
 
 	enum class Read_ready_result  { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 

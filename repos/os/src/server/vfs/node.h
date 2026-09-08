@@ -411,7 +411,6 @@ struct Vfs_server::Symlink : Io_node
 	private:
 
 		Vfs::File_system &_vfs;
-		Vfs::Vfs_handle  &_handle;
 
 		using Write_buffer = String<MAX_PATH_LEN + 1>;
 
@@ -432,25 +431,27 @@ struct Vfs_server::Symlink : Io_node
 			return _packet.length() >= MAX_PATH_LEN;
 		}
 
-		static Vfs_handle &_open(Vfs::File_system  &vfs, Allocator &alloc,
-		                         char const *path)
-		{
-			Vfs_handle *h = nullptr;
-			assert_openlink(vfs.openlink(path, &h, alloc));
-			return *h;
-		}
-
 		void _execute_read()
 		{
 			_payload_ptr.with_bytes(_packet, [&] (Byte_range_ptr const &dst) {
-				_handle.read({ }, dst).with_result(
-					[&] (size_t num_bytes) {
-						_ack_successful_packet(num_bytes, _payload_ptr);
-					},
-					[&] (Vfs_handle::Read_error e) {
-						if (e != Vfs_handle::Read_error::RETRY)
+
+				if (dst.num_bytes == 0) {
+					_ack_failed_packet(_payload_ptr);
+					return;
+				}
+
+				_vfs.follow(path.string(), dst).with_result(
+					[&] (Vfs::Path_elem const path_elem) {
+						if (path_elem.last(Span::from_cstring(path.string())))
+							_ack_successful_packet(strlen(dst.start), _payload_ptr);
+						else
 							_ack_failed_packet(_payload_ptr);
-					}); });
+					},
+					[&] (Vfs::Follow_error e) {
+						if (e != Vfs::Follow_error::RETRY)
+							_ack_failed_packet(_payload_ptr);
+					});
+			});
 		}
 
 		void _execute_write()
@@ -479,14 +480,10 @@ struct Vfs_server::Symlink : Io_node
 
 		Symlink(Node_space       &space,
 		        Vfs::File_system &vfs,
-		        Allocator        &alloc,
 		        Attr       const &attr)
 		:
-			Io_node(space, attr),
-			_vfs(vfs), _handle(_open(vfs, alloc, attr.path.string()))
+			Io_node(space, attr), _vfs(vfs)
 		{ }
-
-		~Symlink() { _handle.close(); }
 
 		Submit_result submit_job(Packet_descriptor packet, Payload_ptr ptr) override
 		{
@@ -514,10 +511,10 @@ struct Vfs_server::Symlink : Io_node
 					return _submit_write();
 				}
 
-			case Packet_descriptor::SYNC:            return _submit_sync();
+			case Packet_descriptor::SYNC:            return Submit_result::DENIED;
 			case Packet_descriptor::READ_READY:      return Submit_result::DENIED;
 			case Packet_descriptor::CONTENT_CHANGED: return Submit_result::DENIED;
-			case Packet_descriptor::WRITE_TIMESTAMP: return _submit_write_timestamp();
+			case Packet_descriptor::WRITE_TIMESTAMP: return Submit_result::DENIED;
 			}
 
 			warning("invalid operation ", (int)_packet.operation(), " "
@@ -530,12 +527,12 @@ struct Vfs_server::Symlink : Io_node
 		{
 			switch (_packet.operation()) {
 
-			case Packet_descriptor::WRITE:           _execute_write(); break;
-			case Packet_descriptor::READ:            _execute_read();  break;
-			case Packet_descriptor::SYNC:            _execute_sync (_handle); break;
-			case Packet_descriptor::WRITE_TIMESTAMP: _execute_mtime(_handle); break;
+			case Packet_descriptor::WRITE: _execute_write(); break;
+			case Packet_descriptor::READ:  _execute_read();  break;
 
 			/* never executed */
+			case Packet_descriptor::SYNC:
+			case Packet_descriptor::WRITE_TIMESTAMP:
 			case Packet_descriptor::READ_READY:
 			case Packet_descriptor::CONTENT_CHANGED:
 				break;
@@ -903,7 +900,7 @@ struct Vfs_server::Directory : Io_node
 		                       Allocator           &alloc,
 		                       Symlink::Attr const &attr)
 		{
-			Symlink &link = *new (alloc) Symlink(space, vfs, alloc, {
+			Symlink &link = *new (alloc) Symlink(space, vfs, {
 				.path      = Path(attr.path.string(), Node_base::path.string()).string(),
 				.writeable = attr.writeable
 			});

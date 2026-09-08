@@ -300,31 +300,26 @@ struct Genode::Directory : Noncopyable, Interface
 		 */
 		Path read_symlink(Path const &rel_path) const
 		{
-			using namespace Vfs;
-			Vfs_handle *link_handle;
-
-			auto open_res = _nonconst_fs().openlink(
-				join(_path, rel_path).string(), &link_handle, _alloc);
-
-			if (open_res != Directory_service::OPENLINK_OK)
-				throw Nonexistent_file();
-
-			Vfs_handle::Guard guard(link_handle);
+			Path const path = join(_path, rel_path);
 
 			char buf[MAX_PATH_LEN];
+			Byte_range_ptr dst(buf, sizeof(buf));
 
-			Vfs_handle::Read_result result = Vfs_handle::Read_error::DENIED;
+			Vfs::Follow_result result = Vfs::Follow_error::DENIED;
 			for (;;) {
-				result = link_handle->read({ }, Byte_range_ptr(buf, sizeof(buf) - 1));
-				if (result != Vfs_handle::Read_error::RETRY)
-					break;
-
+				result = _nonconst_fs().follow(path.string(), dst);
+				if (result != Vfs::Follow_error::RETRY) break;
 				_io.commit_and_wait();
 			};
 
 			return result.convert<Path>(
-				[&] (size_t num_bytes) { return Path(Genode::Cstring(buf, num_bytes)); },
-				[&] (Vfs_handle::Read_error) -> Path  { throw Nonexistent_file(); });
+				[&] (Vfs::Path_elem const path_elem) -> Path {
+					if (path_elem.last(Span::from_cstring(path.string())))
+						return Path(Cstring(dst.start));
+					throw Nonexistent_file();
+				},
+				[&] (Vfs::Follow_error) -> Path { throw Nonexistent_file(); }
+			);
 		}
 
 		/**
@@ -338,7 +333,7 @@ struct Genode::Directory : Noncopyable, Interface
 			for (;;) {
 				Vfs::Symlink_result const result =
 					_nonconst_fs().symlink(join(_path, rel_path).string(),
-				                                target.string(), ts);
+					                       target.string(), ts);
 				if (result != Vfs::Symlink_result::RETRY) break;
 				_io.commit_and_wait();
 			}

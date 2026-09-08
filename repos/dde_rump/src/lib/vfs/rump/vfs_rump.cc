@@ -311,33 +311,6 @@ class Vfs_rump::File_system : public Vfs::File_system
 			}
 		};
 
-		struct Rump_vfs_symlink_handle : Rump_vfs_handle
-		{
-			Rump_vfs_symlink_handle(File_system &fs, Allocator &alloc, int flags, Attr attr)
-			:
-				Rump_vfs_handle(fs, alloc, flags, attr)
-			{ }
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return true; }
-
-			Read_result read(At const at, Byte_range_ptr const &dst) override
-			{
-				if (at.pos != 0)
-					return Read_error::DENIED; /* partial read is not supported */
-
-				ssize_t n = rump_sys_readlink(attr.path.base(), dst.start, dst.num_bytes);
-				if (n >= 0)
-					return n;
-				return Read_error::DENIED;
-			}
-
-			Write_result write(At const, Const_byte_range_ptr const &) override
-			{
-				return Write_error::DENIED;
-			}
-		};
-
 		/*
 		 * Must fit 'struct msdosfs_args' and 'struct ufs_args'. Needed to
 		 * pass mount flags the file-system drivers.
@@ -617,41 +590,12 @@ class Vfs_rump::File_system : public Vfs::File_system
 			return error;
 		}
 
-		Openlink_result openlink(char const *path,
-		                         Vfs_handle **handle, Allocator &alloc) override
-		{
-			char dummy;
-			if (rump_sys_readlink(path, &dummy, sizeof(dummy)) == -1) switch(errno) {
-				case ENOENT: return OPENLINK_ERR_LOOKUP_FAILED;
-				default:
-					error(__func__, ": unhandled rump error ", errno);
-					return OPENLINK_ERR_PERMISSION_DENIED;
-			}
-
-			try {
-				*handle = new (alloc) Rump_vfs_symlink_handle(*this, alloc, 0777, {
-					.path          = { path },
-					.fd            = -1,
-					.new_dir_entry = false
-				});
-				return OPENLINK_OK;
-			}
-			catch (Out_of_ram) { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
-		}
-
 		void close(Vfs_handle *vfs_handle) override
 		{
 			if (Rump_vfs_file_handle *handle =
 				dynamic_cast<Rump_vfs_file_handle *>(vfs_handle))
 			{
 				_file_handles.remove(handle);
-				destroy(vfs_handle->alloc(), handle);
-			}
-			else
-			if (Rump_vfs_symlink_handle *handle =
-				dynamic_cast<Rump_vfs_symlink_handle *>(vfs_handle))
-			{
 				destroy(vfs_handle->alloc(), handle);
 			}
 		}
@@ -775,6 +719,30 @@ class Vfs_rump::File_system : public Vfs::File_system
 
 			return new_dir_entry ? Symlink_result::CREATED
 			                     : Symlink_result::UPDATED;
+		}
+
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
+		{
+			if (!dst.num_bytes) /* no space for null-termination */
+				return Follow_error::DENIED;
+
+			return follow_path(Span::from_cstring(path),
+				[&] (auto const &partial_path) {
+					struct stat s { };
+					return rump_sys_lstat(partial_path.string(), &s) == 0
+					    && S_ISLNK(s.st_mode);
+				},
+				[&] (Path_elem const elem, auto const &partial_path) -> Follow_result {
+
+					ssize_t n = rump_sys_readlink(partial_path.string(),
+					                              dst.start, dst.num_bytes - 1);
+					if (n < 0)
+						return Follow_error::DENIED;
+
+					/* ensure null termination */
+					dst.start[min(size_t(n), dst.num_bytes - 1)] = 0;
+					return elem;
+				});
 		}
 };
 

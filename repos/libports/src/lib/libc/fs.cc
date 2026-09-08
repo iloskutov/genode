@@ -1712,67 +1712,29 @@ int Libc::Fs::symlink(char const *target_path, const char *link_path)
 
 ssize_t Libc::Fs::readlink(const char *link_path, char *buf, ::size_t buf_size)
 {
-	enum class Stage { OPEN, READ };
-
-	Stage stage { Stage::OPEN };
-
-	Vfs::Vfs_handle *handle_ptr = nullptr;
-
 	::size_t out_count    = 0;
 	bool     succeeded    = false;
 	int      result_errno = 0;
 
+	Byte_range_ptr dst(buf, buf_size);
+
 	_monitor.monitor([&] {
 
-		switch (stage) {
-		case Stage::OPEN:
-			{
-				using Openlink_result = Vfs::Directory_service::Openlink_result;
+		Vfs::Follow_result const result = _vfs.follow(link_path, dst);
 
-				Openlink_result openlink_result =
-					_vfs.openlink(link_path, &handle_ptr, _kernel_heap);
+		if (result == Vfs::Follow_error::RETRY)
+			return Fn::INCOMPLETE;
 
-				switch (openlink_result) {
-				case Openlink_result::OPENLINK_ERR_LOOKUP_FAILED:
-					result_errno = ENOENT; return Fn::COMPLETE;
-				case Openlink_result::OPENLINK_ERR_NAME_TOO_LONG:
-					/* should not happen */
-					result_errno = ENAMETOOLONG; return Fn::COMPLETE;
-				case Openlink_result::OPENLINK_ERR_NODE_ALREADY_EXISTS:
-				case Openlink_result::OPENLINK_ERR_NO_SPACE:
-				case Openlink_result::OPENLINK_ERR_OUT_OF_RAM:
-				case Openlink_result::OPENLINK_ERR_OUT_OF_CAPS:
-				case Openlink_result::OPENLINK_ERR_PERMISSION_DENIED:
-					result_errno = EACCES; return Fn::COMPLETE;
-				case Openlink_result::OPENLINK_OK:
-					break;
-				}
-
-				handle_ptr->handler(&_response_handler);
-			}
-			stage = Stage::READ; [[ fallthrough ]];
-
-		case Stage::READ:
-			{
-				Byte_range_ptr const dst { buf, buf_size };
-
-				Vfs::Vfs_handle::Read_result const result = handle_ptr->read({ }, dst);
-				if (result == Vfs::Vfs_handle::Read_error::RETRY)
-					return Fn::INCOMPLETE;
-
-				handle_ptr->close();
-
-				result.with_result(
-					[&] (size_t num_bytes) {
-						out_count = num_bytes;
-						succeeded = true;
-					},
-					[&] (Vfs::Vfs_handle::Read_error) {
-						result_errno = EINVAL; });
-			}
-			break;
-		}
-
+		result.with_result(
+			[&] (Vfs::Path_elem const path_elem) {
+				out_count = ::strlen(buf) + 1;
+				if (path_elem.last(Span::from_cstring(link_path)))
+					succeeded = true;
+				else
+					result_errno = ENOENT;
+			},
+			[&] (Vfs::Follow_error) { result_errno = ENOENT; }
+		);
 		return Fn::COMPLETE;
 	});
 

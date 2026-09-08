@@ -274,24 +274,6 @@ class Vfs_tar::File_system : public Vfs::File_system
 		}
 	};
 
-	struct Tar_vfs_symlink_handle : Tar_vfs_handle
-	{
-		using Tar_vfs_handle::Tar_vfs_handle;
-
-		Read_result read(At const at, Byte_range_ptr const &dst) override
-		{
-			if (at.pos)
-				return Read_error::DENIED;
-
-			Record const *record = _node->record;
-			size_t const count = min(dst.num_bytes, 100UL);
-			memcpy(dst.start, record->linked_name(), count);
-
-			return count;
-		}
-	};
-
-
 	using Path_element_token = Token<Scanner_policy_path_element>;
 
 
@@ -724,21 +706,25 @@ class Vfs_tar::File_system : public Vfs::File_system
 			return Opendir_error::DENIED;
 		}
 
-		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
-		                         Allocator &alloc) override
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
 		{
-			Node const *node = dereference(path);
-			if (!node || !node->record ||
-			    node->record->type() != Record::TYPE_SYMLINK)
-				return OPENLINK_ERR_LOOKUP_FAILED;
+			if (!dst.num_bytes) /* no space for null-termination */
+				return Follow_error::DENIED;
 
-			try {
-				*out_handle = new (alloc)
-					Tar_vfs_symlink_handle(*this, alloc, 0, node);
-				return OPENLINK_OK;
-			}
-			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
+			return follow_path(Span::from_cstring(path),
+				[&] (auto const &partial_path) {
+					Node const *n = dereference(partial_path.string());
+					return n
+					    && n->record
+					    && n->record->type() == Record::TYPE_SYMLINK;
+				},
+				[&] (Path_elem const elem, auto const &partial_path) -> Follow_result {
+					Node const *n = dereference(partial_path.string());
+					Record const &record = *n->record;
+					size_t const count = min(dst.num_bytes, 100UL);
+					copy_cstring(dst.start, record.linked_name(), count);
+					return elem;
+				});
 		}
 
 		void close(Vfs_handle *vfs_handle) override

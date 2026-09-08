@@ -243,19 +243,6 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				[&] () -> Opendir_result { return Opendir_error::DENIED; });
 		}
 
-		Openlink_result openlink(char const *path, Vfs_handle **out,
-		                         Allocator &alloc) override
-		{
-			if (_slash(path))
-				return OPENLINK_ERR_PERMISSION_DENIED; /* cannot open dir as link */
-
-			return _with_sub_path(path,
-				[&] (auto const &path) {
-					return _union.openlink(path, out, alloc);
-				},
-				[&] () -> Openlink_result { return OPENLINK_ERR_LOOKUP_FAILED; });
-		}
-
 		void close(Vfs_handle *handle) override
 		{
 			if (handle && (&handle->ds() == this))
@@ -324,6 +311,20 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 			return _with_sub_path(path,
 				[&] (auto const &path)   { return _union.symlink(path, target, ts); },
 				[&] () -> Symlink_result { return Symlink_result::DENIED; });
+		}
+
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
+		{
+			if (_slash(path))
+				return Path_elem { 0 };
+
+			return _with_sub_path(path,
+				[&] (auto const &path) {
+					return _union.follow(path, dst).template convert<Follow_result>(
+						[&] (Path_elem elem) { return Path_elem { elem.index + 1 }; },
+						[&] (Follow_error e) { return e; });
+				},
+				[&] () -> Follow_result { return Follow_error::DENIED; });
 		}
 
 		Progress update(Node const &node, Factory &factory) override

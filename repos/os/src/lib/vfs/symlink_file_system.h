@@ -34,29 +34,6 @@ class Vfs_symlink::File_system : public Single_file_system
 
 		Target const _target;
 
-		struct Symlink_handle final : Single_vfs_handle
-		{
-			File_system const &_fs;
-
-			Symlink_handle(File_system &fs, Allocator &alloc)
-			:
-				Single_vfs_handle(fs, alloc, 0), _fs(fs)
-			{ }
-
-			Read_result read(At const at, Byte_range_ptr const &dst) override
-			{
-				if (at.pos != 0)
-					return Read_error::DENIED;
-
-				size_t const n = min(dst.num_bytes, _fs._target.length());
-				copy_cstring(dst.start, _fs._target.string(), n);
-				return (n > 0) ? n - 1 : 0;
-			}
-
-			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return false; }
-		};
-
 		struct Symlink_dir_channel : Vfs::Dir_channel
 		{
 			File_system &_fs;
@@ -115,18 +92,17 @@ class Vfs_symlink::File_system : public Single_file_system
 		Open_result open(char const *, unsigned, Vfs_handle **, Allocator&) override {
 			return OPEN_ERR_UNACCESSIBLE; }
 
-		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
-		                         Allocator &alloc) override
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
 		{
 			if (!_single_file(path))
-				return OPENLINK_ERR_LOOKUP_FAILED;
+				return Follow_error::DENIED;
 
-			try {
-				*out_handle = new (alloc) Symlink_handle(*this, alloc);
-				return OPENLINK_OK;
-			}
-			catch (Out_of_ram)  { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPENLINK_ERR_OUT_OF_CAPS; }
+			_target.with_span([&] (Span const &src) {
+				size_t n = min(dst.num_bytes,
+				               src.num_bytes + 1 /* null termination */);
+				copy_cstring(dst.start, src.start, n); });
+
+			return Path_elem { 0 };
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

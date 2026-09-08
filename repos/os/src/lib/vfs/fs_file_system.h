@@ -211,6 +211,45 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 		Constructible<Symlink_op> _symlink_op { };
 
+		/**
+		 * State of current follow operation
+		 */
+		struct Follow_op : private Open_fs_handle
+		{
+			File_system &_fs;
+
+			using Open_fs_handle::file_handle;
+
+			using Path = String<MAX_PATH_LEN>;
+			Path const path;
+
+			Path_elem const path_elem;
+			Path target { }; /* result of read operation */
+
+			enum class State { PENDING, READ_SUBMITTED };
+			State state = State::PENDING;
+			bool acked = false;
+
+			Follow_op(File_system &fs, ::File_system::Symlink_handle h,
+			          Path const &p, Path_elem e)
+			:
+				Open_fs_handle(fs._handle_space, h),
+				_fs(fs), path(p), path_elem(e)
+			{ }
+
+			~Follow_op() { _fs._fs.close(file_handle()); }
+
+			Handle_ack_result handle_ack(Packet_descriptor const &packet) override
+			{
+				::File_system::Session::Tx::Source &source = *_fs._fs.tx();
+				target = { Cstring(source.packet_content(packet), packet.length()) };
+				acked = true;
+				return { .release_packet = true };
+			}
+		};
+
+		Constructible<Follow_op> _follow_op { };
+
 		template <typename RESULT, typename ERROR>
 		static RESULT _read(File_system &fs, ::File_system::File_handle const fh,
 		                    Queued_state      &queued_read_state,
@@ -586,11 +625,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				_queued_read_state  = Queued_state::ACK;
 				return { };
 			};
-		};
-
-		struct Fs_vfs_symlink_handle : Fs_vfs_handle
-		{
-			using Fs_vfs_handle::Fs_vfs_handle;
 		};
 
 		/**
@@ -981,6 +1015,88 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return result;
 		}
 
+		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
+		{
+			if (!dst.num_bytes) /* no space for null-termination */
+				return Follow_error::DENIED;
+
+			/* cancel incomplete follow operation if paths mismatch */
+			if (_follow_op.constructed() && (_follow_op->path != path))
+				_follow_op.destruct();
+
+			if (!_follow_op.constructed()) {
+
+				Follow_result const result = follow_path(Span::from_cstring(path),
+					[&] (auto const &partial_path) {
+						return _symlink(partial_path.string());
+					},
+					[&] (Path_elem const elem, auto const &partial_path) -> Follow_result {
+
+						Absolute_path abs_path(partial_path);
+						abs_path.strip_last_element();
+
+						Absolute_path symlink_name(partial_path);
+						symlink_name.keep_only_last_element();
+
+						try {
+							::File_system::Dir_handle dir_handle = _fs.dir(abs_path.base(), false);
+
+							Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
+
+							auto const &name_wo_slash = symlink_name.string() + 1;
+							::File_system::Symlink_handle symlink =
+								_fs.symlink(dir_handle, name_wo_slash, false);
+
+							_follow_op.construct(*this, symlink, path, elem);
+
+							return elem;
+
+						} catch (...) { return Follow_error::DENIED; }
+					});
+
+				if (result.failed())
+					return result;
+			}
+
+			/* _follow_op is constructed at this point */
+
+			if (_follow_op->state == Follow_op::State::PENDING) {
+
+				using ::File_system::Packet_descriptor;
+				using Tx = ::File_system::Session::Tx;
+
+				Tx::Source &source = *_fs.tx();
+
+				/* check precondition for read operation */
+				if (!source.ready_to_submit())
+					return Follow_error::RETRY;
+
+				try {
+					Packet_descriptor packet_in(source.alloc_packet(dst.num_bytes),
+					                            _follow_op->file_handle(),
+					                            Packet_descriptor::READ,
+					                            dst.num_bytes, 0);
+
+					_submit_packet(packet_in);
+					_follow_op->state = Follow_op::State::READ_SUBMITTED;
+				}
+				catch (Tx::Source::Packet_alloc_failed) { return Follow_error::RETRY; }
+			}
+
+			if (!_follow_op->acked)
+				return Follow_error::RETRY;
+
+			_follow_op->target.with_span([&] (Span const &src) {
+				size_t n = min(dst.num_bytes,
+				               src.num_bytes + 1 /* null termination */);
+				copy_cstring(dst.start, src.start, n);
+			});
+
+			Path_elem const result = _follow_op->path_elem;
+			_follow_op.destruct();
+			return result;
+		}
+
 		unsigned num_dirent(char const *path) override
 		{
 			if (strcmp(path, "") == 0)
@@ -1005,6 +1121,20 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				::File_system::Status status = _fs.status(node);
 
 				return status.directory();
+			}
+			catch (...) { }
+			return false;
+		}
+
+		bool _symlink(char const *path)
+		{
+			try {
+				::File_system::Node_handle node = _fs.node(path);
+				Fs_handle_guard node_guard(*this, node, _handle_space);
+
+				::File_system::Status status = _fs.status(node);
+
+				return status.symlink();
 			}
 			catch (...) { }
 			return false;
@@ -1090,45 +1220,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				_fs.close(dir);
 
 			return error;
-		}
-
-		Openlink_result openlink(char const *path, Vfs_handle **out_handle,
-		                         Allocator &alloc) override
-		{
-			/*
-			 * Canonicalize path (i.e., path must start with '/')
-			 */
-			Absolute_path abs_path(path);
-			abs_path.strip_last_element();
-
-			Absolute_path symlink_name(path);
-			symlink_name.keep_only_last_element();
-
-			try {
-				::File_system::Dir_handle dir_handle = _fs.dir(abs_path.base(),
-				                                               false);
-
-				Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
-
-				::File_system::Symlink_handle symlink_handle =
-				    _fs.symlink(dir_handle, symlink_name.base() + 1, false);
-
-				*out_handle = new (alloc)
-					Fs_vfs_symlink_handle(*this, alloc,
-					                      ::File_system::READ_ONLY,
-					                      _handle_space, symlink_handle);
-
-				return OPENLINK_OK;
-			}
-			catch (::File_system::Invalid_handle)      { return OPENLINK_ERR_LOOKUP_FAILED; }
-			catch (::File_system::Invalid_name)        { return OPENLINK_ERR_LOOKUP_FAILED; }
-			catch (::File_system::Lookup_failed)       { return OPENLINK_ERR_LOOKUP_FAILED; }
-			catch (::File_system::Node_already_exists) { return OPENLINK_ERR_NODE_ALREADY_EXISTS; }
-			catch (::File_system::No_space)            { return OPENLINK_ERR_NO_SPACE; }
-			catch (::File_system::Permission_denied)   { return OPENLINK_ERR_PERMISSION_DENIED; }
-			catch (::File_system::Unavailable)         { return OPENLINK_ERR_LOOKUP_FAILED; }
-			catch (Out_of_ram)                         { return OPENLINK_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps)                        { return OPENLINK_ERR_OUT_OF_CAPS; }
 		}
 
 		void close(Vfs_handle *vfs_handle) override

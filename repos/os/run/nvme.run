@@ -31,7 +31,7 @@ import_from_depot [depot_user]/src/[base_src] \
                   [depot_user]/src/init \
                   [depot_user]/src/nvme \
                   [depot_user]/src/pci_decode \
-                  [depot_user]/src/platform \
+                  [depot_user]/src/pc_platform \
                   [depot_user]/src/report_rom
 
 #
@@ -77,6 +77,8 @@ config | verbose: no
   + config
     + policy | label: pci_decode -> system | report: acpi -> acpi
     + policy | label: platform -> devices  | report: pci_decode -> devices
+    + policy | label: platform -> system   | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
 
 + start acpi | caps: 350 | ram: 4M
   + route
@@ -99,12 +101,15 @@ config | verbose: no
     + service CPU                    | + parent
     + service ROM                    | + parent
 
-+ start platform | caps: 100 | ram: 2M | managing_system: yes
++ start platform | caps: 200 | ram: 2M | managing_system: yes
+  + binary pc_platform
   + provides
     + service Platform
     + service Dma
   + route
     + service ROM     | label: devices | + child report_rom
+    + service ROM     | label: system  | + child report_rom
+    + service ROM     | label: sleep_states | + child report_rom
     + service Report                   | + child report_rom
     + service Timer                    | + child timer
     + service IRQ                      | + parent
@@ -118,7 +123,7 @@ config | verbose: no
     + report | devices: yes
     + policy | label: nvme -> | + pci | class: NVME
 
-+ start nvme | caps: 140 | ram: 24M
++ start nvme | caps: 200 | ram: 24M
   + provides | + service Block
   + config | max_hmb_size: 16M | verbose_regs: yes | verbose_identify: yes
     + policy | label_prefix: block_tester | writeable: no

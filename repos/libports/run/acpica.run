@@ -26,7 +26,7 @@ import_from_depot [depot_user]/src/[base_src] \
                   [depot_user]/src/event_filter \
                   [depot_user]/src/init \
                   [depot_user]/src/pc_usb_host \
-                  [depot_user]/src/platform \
+                  [depot_user]/src/pc_platform \
                   [depot_user]/src/ps2 \
                   [depot_user]/src/report_rom \
                   [depot_user]/src/usb_hid
@@ -60,6 +60,8 @@ config
   + config | verbose: no
     + policy | label: pci_decode -> system | report: acpi -> acpi
     + policy | label: platform -> devices  | report: pci_decode -> devices
+    + policy | label: platform -> system   | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
     + policy | label: usb_hid -> report    | report: usb -> devices
 
 + start acpi | caps: 350 | ram: 6M
@@ -78,6 +80,7 @@ config
       + any-child
 
 + start platform | caps: 400 | managing_system: yes | ram: 4M
+  + binary pc_platform
   + provides
     + service Dma
     + service Platform
@@ -86,7 +89,9 @@ config
   | + policy | label_prefix: usb | info: yes | + pci | class: USB
   | + policy | label_prefix: acpica          | + device acpi
   + route
-    + service ROM | label: devices | + child drivers_reports
+    + service ROM | label: devices      | + child drivers_reports
+    + service ROM | label: system       | + child drivers_reports
+    + service ROM | label: sleep_states | + child drivers_reports
     + any-service
       + parent
       + any-child

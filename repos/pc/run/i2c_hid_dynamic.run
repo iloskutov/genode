@@ -15,7 +15,7 @@ import_from_depot \
 	[depot_user]/src/init \
 	[depot_user]/src/acpi \
 	[depot_user]/src/pci_decode \
-	[depot_user]/src/platform \
+	[depot_user]/src/pc_platform \
 	[depot_user]/src/dynamic_rom \
 	[depot_user]/src/cpu_burner \
 	[depot_user]/pkg/pc_i2c_hid
@@ -49,12 +49,10 @@ config | prio_levels: 2
   | + service Report
   | + service ROM
   + config | verbose: no
-    + policy
-    |        label:  pci_decode -> system
-    |        report: acpi -> acpi
-    + policy
-             label:  platform -> devices
-             report: pci_decode -> devices
+    + policy | label: pci_decode -> system     | report: acpi -> acpi
+    + policy | label: platform -> devices      | report: pci_decode -> devices
+    + policy | label: platform -> system       | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
 
 + start acpi | caps: 350 | ram: 6M
   + route
@@ -75,6 +73,7 @@ config | prio_levels: 2
       + any-child
 
 + start platform | caps: 400 | ram: 4M | managing_system: yes
+  + binary pc_platform
   + provides
   | + service Dma
   | + service Platform
@@ -89,10 +88,10 @@ config | prio_levels: 2
   |   + device INT34C5  | . Tiger/Alder Lake
   |   + device INTC1083 | . Meteor/Arrow Lake
   + route
-    + service ROM | label: devices
-    | + child drivers_reports
-    + service Report
-    | + child drivers_reports
+    + service ROM | label: devices      | + child drivers_reports
+    + service ROM | label: system       | + child drivers_reports
+    + service ROM | label: sleep_states | + child drivers_reports
+    + service Report                    | + child drivers_reports
     + any-service
       + parent
       + any-child
@@ -121,7 +120,7 @@ x start cpu_burner
           + default-route
           | + any-service
           |   + parent
-          + start pc_i2c_hid | caps: 150 | ram: 8M
+          + start pc_i2c_hid | caps: 160 | ram: 8M
             + config
               + i2c_slave  | irq: 266 | bus_addr: 44 | hid_addr: 32 | gpio_chip: INT34C5  | . Fujitsu U7411 (SYNAPTICS)
               x i2c_slave  | irq: 266 | bus_addr: 21 | hid_addr: 1  | gpio_chip: INT34C5  | . Fujitsu U7511 (ELAN)

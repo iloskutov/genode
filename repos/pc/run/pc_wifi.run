@@ -17,7 +17,7 @@ import_from_depot [depot_user]/src/[base_src] \
                   [depot_user]/src/nic_router \
                   [depot_user]/src/pc_rtc \
                   [depot_user]/src/pci_decode \
-                  [depot_user]/src/platform \
+                  [depot_user]/src/pc_platform \
                   [depot_user]/src/report_rom \
                   [depot_user]/src/vfs_jitterentropy \
                   [depot_user]/src/vfs_lwip \
@@ -64,13 +64,16 @@ config | verbose: yes | prio_levels: 2
 + start timer
   + provides | + service Timer
 
-+ start report_rom | caps: 70
++ start drivers_reports | caps: 70
+  + binary report_rom
   + provides
     + service ROM
     + service Report
   + config | verbose: yes
-    + policy | label:  pci_decode -> system | report: acpi -> acpi
-    + policy | label:  platform -> devices  | report: pci_decode -> devices
+    + policy | label: pci_decode -> system     | report: acpi -> acpi
+    + policy | label: platform -> devices      | report: pci_decode -> devices
+    + policy | label: platform -> system       | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
   + route
     + service CPU | + parent
     + service LOG | + parent
@@ -79,7 +82,7 @@ config | verbose: yes | prio_levels: 2
 
 + start acpi | caps: 250 | ram: 6M
   + route
-    + service Report | + child report_rom
+    + service Report | + child drivers_reports
     + service CPU    | + parent
     + service IO_MEM | + parent
     + service LOG    | + parent
@@ -89,8 +92,8 @@ config | verbose: yes | prio_levels: 2
 
 + start pci_decode | caps: 350 | ram: 2M
   + route
-    + service ROM    | label: system | + child report_rom
-    + service Report                 | + child report_rom
+    + service ROM    | label: system | + child drivers_reports
+    + service Report                 | + child drivers_reports
     + service CPU                    | + parent
     + service IO_MEM                 | + parent
     + service LOG                    | + parent
@@ -98,23 +101,25 @@ config | verbose: yes | prio_levels: 2
     + service RM                     | + parent
     + service ROM                    | + parent
 
-+ start platform | caps: 100 | ram: 2M | managing_system: yes
++ start platform | caps: 200 | ram: 2M | managing_system: yes
+  + binary pc_platform
   + provides
     + service Dma
     + service Platform
   + config
-    + policy | label_prefix: wifi | msix: false | info: yes
-      + pci | class: WIFI
+    + policy | label_prefix: wifi | info: yes | + pci | class: WIFI
   + route
-    + service ROM     | label: devices | + child report_rom
-    + service Timer                    | + child timer
-    + service CPU                      | + parent
-    + service IO_MEM                   | + parent
-    + service IO_PORT                  | + parent
-    + service IRQ                      | + parent
-    + service LOG                      | + parent
-    + service PD                       | + parent
-    + service ROM                      | + parent
+    + service ROM | label: devices      | + child drivers_reports
+    + service ROM | label: system       | + child drivers_reports
+    + service ROM | label: sleep_states | + child drivers_reports
+    + service Timer                     | + child timer
+    + service CPU                       | + parent
+    + service IO_MEM                    | + parent
+    + service IO_PORT                   | + parent
+    + service IRQ                       | + parent
+    + service LOG                       | + parent
+    + service PD                        | + parent
+    + service ROM                       | + parent
 
 + start pc_rtc
   + provides | + service Rtc
@@ -194,7 +199,7 @@ config | verbose: yes | prio_levels: 2
     + service ROM
   + config | verbose: yes
 
-+ start wifi | caps: 300 | ram: 32M | priority: -1
++ start wifi | caps: 320 | ram: 32M | priority: -1
   + config | ld_verbose: yes
   | + report | mac_address: true
   | + libc | stdout: /dev/log | stderr: /dev/log | rtc: /dev/rtc | rng: /dev/urandom

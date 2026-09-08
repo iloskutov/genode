@@ -10,7 +10,7 @@ import_from_depot \
 	[depot_user]/src/init \
 	[depot_user]/src/acpi \
 	[depot_user]/src/pci_decode \
-	[depot_user]/src/platform \
+	[depot_user]/src/pc_platform \
 	[depot_user]/src/nic_router \
 	[depot_user]/src/pc_nic
 
@@ -43,8 +43,10 @@ config | prio_levels: 2
     + service Report
     + service ROM
   + config | verbose: no
-    + policy | label: pci_decode -> system | report: acpi -> acpi
-    + policy | label: platform -> devices  | report: pci_decode -> devices
+    + policy | label: pci_decode -> system     | report: acpi -> acpi
+    + policy | label: platform -> devices      | report: pci_decode -> devices
+    + policy | label: platform -> system       | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
 
 + start acpi | caps: 350 | ram: 6M
   + route
@@ -55,13 +57,14 @@ config | prio_levels: 2
 
 + start pci_decode | caps: 350
   + route
-    + service ROM    | label: system | + child drivers_reports
-    + service Report                 | + child drivers_reports
+    + service ROM | label: system | + child drivers_reports
+    + service Report              | + child drivers_reports
     + any-service
       + parent
       + any-child
 
 + start platform | caps: 400 | ram: 4M | managing_system: yes
+  + binary pc_platform
   + provides
     + service Dma
     + service Platform
@@ -69,8 +72,10 @@ config | prio_levels: 2
   | + report | devices: yes
   | + policy | label_prefix: pc_nic | info: yes | + pci | class: ETHERNET
   + route
-    + service ROM    | label: devices | + child drivers_reports
-    + service Report                  | + child drivers_reports
+    + service ROM | label: devices      | + child drivers_reports
+    + service ROM | label: system       | + child drivers_reports
+    + service ROM | label: sleep_states | + child drivers_reports
+    + service Report                    | + child drivers_reports
     + any-service
       + parent
       + any-child

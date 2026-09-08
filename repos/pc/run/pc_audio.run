@@ -16,7 +16,7 @@ import_from_depot \
 	[depot_user]/src/init \
 	[depot_user]/src/acpi \
 	[depot_user]/src/pci_decode \
-	[depot_user]/src/platform \
+	[depot_user]/src/pc_platform \
 	[depot_user]/src/record_play_mixer \
 	[depot_user]/src/vfs \
 	[depot_user]/src/pc_audio \
@@ -53,8 +53,10 @@ config | prio_levels: 2
     + service Report
     + service ROM
   + config | verbose: no
-    + policy | label: pci_decode -> system | report: acpi -> acpi
-    + policy | label: platform -> devices  | report: pci_decode -> devices
+    + policy | label: pci_decode -> system     | report: acpi -> acpi
+    + policy | label: platform -> devices      | report: pci_decode -> devices
+    + policy | label: platform -> system       | report: dummy
+    + policy | label: platform -> sleep_states | report: dummy
 
 + start acpi | caps: 350 | ram: 6M
   + route
@@ -72,6 +74,7 @@ config | prio_levels: 2
       + any-child
 
 + start platform | caps: 400 | ram: 4M | managing_system: yes
+  + binary pc_platform
   + provides
     + service Dma
     + service Platform
@@ -82,8 +85,10 @@ config | prio_levels: 2
       + pci | class: AUDIO
       + pci | class: HDAUDIO
   + route
-    + service ROM    | label: devices | + child drivers_reports
-    + service Report                  | + child drivers_reports
+    + service ROM    | label: devices      | + child drivers_reports
+    + service ROM    | label: system       | + child drivers_reports
+    + service ROM    | label: sleep_states | + child drivers_reports
+    + service Report                       | + child drivers_reports
     + any-service
       + parent
       + any-child
@@ -118,7 +123,7 @@ config | prio_levels: 2
 
 + start pc_audio | priority: -1 | ram: 10M
   + config | report_mixer: yes | report_devices: yes | speaker_priority: external | mic_priority: external
-           | . profile: u7411
+           | . profile: zbook8
     + vfs
       + dir firmware | + tar sof_firmware.tar
     + profile s937 | . HDA

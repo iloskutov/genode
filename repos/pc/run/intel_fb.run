@@ -30,7 +30,7 @@ import_from_depot [depot_user]/src/fs_rom \
 set build_components {
 	core lib/ld init timer
 	driver/acpi
-	driver/platform
+	driver/platform/pc
 	app/pci_decode
 	driver/framebuffer/intel/pc
 	test/framebuffer
@@ -77,6 +77,8 @@ config | verbose: yes | prio_levels: 4
   | + policy | label: pci_decode -> system       | report: acpi -> acpi
   | + policy | label: intel_fb -> intel_opregion | report: acpi -> intel_opregion
   | + policy | label: platform -> devices        | report: pci_decode -> devices
+  | + policy | label: platform -> system         | report: dummy
+  | + policy | label: platform -> sleep_states   | report: dummy
   + route
     + service LOG | + parent
     + service PD  | + parent
@@ -104,20 +106,23 @@ config | verbose: yes | prio_levels: 4
     + service CPU                 | + parent
     + service ROM                 | + parent
 
-+ start platform | caps: 100 | ram: 2M | managing_system: yes | priority: -1
++ start platform | caps: 200 | ram: 2M | managing_system: yes | priority: -1
+  + binary pc_platform
   + provides
   | + service Dma
   | + service Platform
   + route
-  | + service ROM | label: devices | + child report_rom
-  | + service IRQ                  | + parent
-  | + service IO_MEM               | + parent
-  | + service IO_PORT              | + parent
-  | + service ROM                  | + parent
-  | + service PD                   | + parent
-  | + service CPU                  | + parent
-  | + service LOG                  | + parent
-  | + service Timer                | + child timer
+  | + service ROM | label: devices      | + child report_rom
+  | + service ROM | label: system       | + child report_rom
+  | + service ROM | label: sleep_states | + child report_rom
+  | + service IRQ                       | + parent
+  | + service IO_MEM                    | + parent
+  | + service IO_PORT                   | + parent
+  | + service ROM                       | + parent
+  | + service PD                        | + parent
+  | + service CPU                       | + parent
+  | + service LOG                       | + parent
+  | + service Timer                     | + child timer
   + config
     + policy | label_prefix: intel_fb | info: yes
     | + pci | class: VGA

@@ -805,20 +805,14 @@ extern "C" void genode_mixer_update_controls(struct genode_mixer_controls *contr
 
 	if (!_audio().mixer_update && !force) return;
 
-	using Name = Genode::String<32>;
-	Name const config_profile_name =
-		_audio().config.node().attribute_value("profile", Name());
-
-	if (config_profile_name == "") {
-		warning("no profile name specified");
-		return;
-	}
+	bool profile_selected = false;
 
 	_audio().config.node().for_each_sub_node("profile", [&] (Node const &node) {
 
-		Name const profile_name = node.attribute_value("name", Name());
-		if (profile_name != config_profile_name)
+		if (profile_selected)
 			return;
+
+		profile_selected = true;
 
 		node.for_each_sub_node("control", [&] (Node const &node) {
 
@@ -863,6 +857,11 @@ extern "C" void genode_mixer_update_controls(struct genode_mixer_controls *contr
 			}
 		});
 	});
+
+	if (!profile_selected) {
+		warning("no profile specified");
+		return;
+	}
 
 	_audio().mixer_update = false;
 }
@@ -919,23 +918,20 @@ extern "C" bool genode_query_routing(struct genode_routing *routing)
 
 	bool result = false;
 
-	using Name = Genode::String<32>;
-	Name const config_profile_name =
-		_audio().config.node().attribute_value("profile", Name());
-
-	if (config_profile_name == "") {
-		warning("no profile name specified");
-		return false;
-	}
+	bool profile_selected = false;
 
 	_audio().config.node().for_each_sub_node("profile", [&] (Node const &node) {
 
-		Name const profile_name = node.attribute_value("name", Name());
-		if (profile_name != config_profile_name)
+		if (profile_selected)
 			return;
+
+		profile_selected = true;
 
 		node.with_sub_node("routing",
 			[&] (Node const &node) {
+
+				using Name = Genode::String<32>;
+				Name const profile_name = node.attribute_value("name", Name());
 
 				log("Use routing information from profile ", profile_name);
 
@@ -970,6 +966,11 @@ extern "C" bool genode_query_routing(struct genode_routing *routing)
 			},
 			[&] { error("no routing specified"); });
 	});
+
+	if (!profile_selected) {
+		warning("no profile specified");
+		return false;
+	}
 
 	return result;
 }

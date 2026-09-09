@@ -20,10 +20,10 @@ run-script found in 'repos/pc/run':
 
 The run-script is configured in a way that all devices and mixer controls
 are reported because it already contains the configuration profiles for a
-variety of different systems but no profile is selected by default. Use
-the 'profile' attribute in the 'config' node to choose the appriopriate
-configuration profile for your system or follow the Configuration section
- In case there is none and create one yourself by inspecting the reports.
+variety of different systems but no profile is selected by default. Skim
+the available profiles and look for one that could match your device.
+In case there is none or it is inconclusive inspect the reports and create
+a profile yourself (see Configuration section).
 
 By default the run-script routes the microphone input to the Play session
 and thus acts as a monitor.
@@ -41,6 +41,10 @@ be used for external/internal playback and external/internal recording.
 It also contains the mixer controls that are managed by the driver for
 switching between external/internal playback and recording automatically
 (see Jack handling for more information).
+
+The driver evaluates the first encountered 'profile' node only, other ones
+are skipped. Changing a profile at run-time is not supported and may
+result in faulty behavior.
 
 
 Devices

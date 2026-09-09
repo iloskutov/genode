@@ -123,10 +123,9 @@ config | prio_levels: 2
 
 + start pc_audio | priority: -1 | ram: 10M
   + config | report_mixer: yes | report_devices: yes | speaker_priority: external | mic_priority: external
-           | . profile: zbook8
     + vfs
       + dir firmware | + tar sof_firmware.tar
-    + profile s937 | . HDA
+    x profile s937 | . HDA
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D0c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id: 3
                 | mic_external_id:     7 | mic_internal_id:     7
@@ -140,7 +139,7 @@ config | prio_levels: 2
       + control Capture Volume            | id:  6 | channel: 1 | type: int  | value: 63 | min: 0 | max: 63
       + control Master Playback Volume    | id:  9 | channel: 0 | type: int  | value: 60 | min: 0 | max: 87
       + control Master Playback Switch    | id: 10 | channel: 0 | type: bool | value: true
-    + profile s938 | . HDA
+    x profile s938 | . HDA
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D0c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id: 3
                 | mic_external_id:     7 | mic_internal_id:     7
@@ -154,7 +153,7 @@ config | prio_levels: 2
       + control Capture Volume            | id:  6 | channel: 1 | type: int  | value: 63 | min: 0 | max: 63
       + control Master Playback Volume    | id:  9 | channel: 0 | type: int  | value: 60 | min: 0 | max: 87
       + control Master Playback Switch    | id: 10 | channel: 0 | type: bool | value: true
-    + profile u7411 | . SOF Tiger Lake
+    x profile u7411 | . SOF Tiger Lake
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D6c | mic_headset: pcmC0D0c
                 | speaker_external_id:  1 | speaker_internal_id:  3
                 | mic_external_id:     13 | mic_internal_id:     30
@@ -176,7 +175,7 @@ config | prio_levels: 2
       + control Dmic0 Capture Volume      | id: 29 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 32 | channel: 0 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 32 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
-    + profile u7412 | . SOF Alder Lake
+    x profile u7412 | . SOF Alder Lake
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D6c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id:  3
                 | mic_external_id:     8 | mic_internal_id:     25
@@ -197,7 +196,7 @@ config | prio_levels: 2
       + control Dmic0 Capture Volume      | id: 24 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 27 | channel: 0 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 27 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
-    + profile u7413 | . SOF Raptor Lake (same as Alder Lake)
+    x profile u7413 | . SOF Raptor Lake (same as Alder Lake)
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D6c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id:  3
                 | mic_external_id:     8 | mic_internal_id:     25
@@ -218,7 +217,7 @@ config | prio_levels: 2
       + control Dmic0 Capture Volume      | id: 24 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 27 | channel: 0 | type: int  | value: 70 | min: 0 | max: 70
       + control Dmic1 2nd Capture Volume  | id: 27 | channel: 1 | type: int  | value: 70 | min: 0 | max: 70
-    + profile ds57u | . HDA
+    x profile ds57u | . HDA
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D0c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | mic_external_id: 6
       + control Master Playback Volume    | id:  0 | channel: 0 | type: int  | value: 60 | min: 0 | max: 87
@@ -226,7 +225,7 @@ config | prio_levels: 2
       + control Loopback Mixing           | id:  2              | type: enum | selected: 0
       + control Capture Volume            | id:  5 | channel: 0 | type: int  | value: 63 | min: 0 | max: 63
       + control Capture Volume            | id:  5 | channel: 1 | type: int  | value: 63 | min: 0 | max: 63
-    + profile t490 | . HDA
+    x profile t490 | . HDA
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D0c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id: 3
                 | mic_external_id:     6 | mic_internal_id:     6
@@ -239,7 +238,7 @@ config | prio_levels: 2
       + control Capture Volume            | id:  5 | channel: 1 | type: int  | value: 63 | min: 0 | max: 63
       + control Master Playback Volume    | id:  9 | channel: 0 | type: int  | value: 60 | min: 0 | max: 87
       + control Master Playback Switch    | id: 10 | channel: 0 | type: bool | value: true
-    + profile x280 | . HDA
+    x profile x280 | . HDA
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D0c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id: 3
                 | mic_external_id:     6 | mic_internal_id:     6
@@ -252,7 +251,7 @@ config | prio_levels: 2
       + control Capture Volume            | id:  5 | channel: 1 | type: int  | value: 63 | min: 0 | max: 63
       + control Master Playback Volume    | id:  9 | channel: 0 | type: int  | value: 60 | min: 0 | max: 87
       + control Master Playback Switch    | id: 10 | channel: 0 | type: bool | value: true
-    + profile zbook8 | . SOF Arrow Lake
+    x profile zbook8 | . SOF Arrow Lake
       + routing | playback: pcmC0D0p | mic_internal: pcmC0D6c | mic_headset: pcmC0D0c
                 | speaker_external_id: 1 | speaker_internal_id:  3
                 | mic_external_id:     8 | mic_internal_id:     32

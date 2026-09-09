@@ -50,6 +50,7 @@ extern "C" {
 #include <internal/init.h>
 #include <internal/cwd.h>
 #include <internal/config.h>
+#include <internal/procfs.h>
 
 using namespace Libc;
 
@@ -70,14 +71,16 @@ Libc::Mmap_registry &Libc::mmap_registry()
 static Libc::Cwd          *_cwd_ptr;
 static Libc::Fs           *_fs_ptr;
 static Libc::Config const *_config_ptr;
+static Libc::Procfs       *_procfs_ptr;
 
 
-void Libc::init_file_operations(Cwd &cwd, Fds &fds, Fs &fs, Config const &config)
+void Libc::init_file_operations(Cwd &cwd, Fds &fds, Fs &fs, Config const &config, Procfs &procfs)
 {
 	_fds_ptr    = &fds;
 	_cwd_ptr    = &cwd;
 	_fs_ptr     = &fs;
 	_config_ptr = &config;
+	_procfs_ptr = &procfs;
 }
 
 
@@ -98,6 +101,16 @@ static Libc::Config const &config()
 		throw Missing_call_of_init_file_operations();
 
 	return *_config_ptr;
+}
+
+
+static Libc::Procfs &procfs()
+{
+	struct Missing_call_of_init_file_operations : Exception { };
+	if (!_procfs_ptr)
+		throw Missing_call_of_init_file_operations();
+
+	return *_procfs_ptr;
 }
 
 
@@ -157,7 +170,7 @@ static Symlink_resolve_result _resolve_symlink(Absolute_path const &path,
 		return Symlink_resolve_error();
 	}
 
-	resolved_path = tmp_resolved_path;
+	resolved_path = procfs().resolve_proc_self(tmp_resolved_path);
 
 	return Ok();
 }
@@ -271,9 +284,11 @@ extern "C" int access(const char *path, int amode)
 	if (path[0] == '\0')
 		return Errno(ENOENT);
 
-	Absolute_path resolved_path;
+	Absolute_path       resolved_path;
+	Absolute_path const abs_path(path, cwd().string());
 
-	if (resolve_symlinks(path, resolved_path).failed()) {
+	if (resolve_symlinks(procfs().resolve_proc_self(abs_path).string(),
+	                     resolved_path).failed()) {
 		errno = ENOENT;
 		return -1;
 	}
@@ -307,6 +322,8 @@ extern "C" int chdir(const char *path)
 __SYS_(int, close, (int libc_fd),
 {
 	File_descriptor *fd_ptr = nullptr;
+
+	procfs().remove_fd_file(libc_fd);
 
 	int ret = with_fd(libc_fd, nullptr /* silent */, [&] (File_descriptor &fd) {
 
@@ -348,6 +365,8 @@ static int _dup(File_descriptor &fd, Fds::Bits &bits, Fds::Space &space, int new
 	{
 		File_descriptor &new_fd =
 			*new (fs()._kernel_heap) File_descriptor(space, new_id, open_file_or_dir, fd.path);
+
+		procfs().add_fd_file(new_id, fd.path);
 
 		new_fd.flags = new_flags;
 		fs().lseek(new_fd, fs().lseek(fd, 0, SEEK_CUR), SEEK_SET);
@@ -615,9 +634,11 @@ extern "C" int lstat(const char *path, struct stat *buf)
 	if (path[0] == '\0')
 		return Errno(ENOENT);
 
-	Absolute_path resolved_path;
+	Absolute_path       resolved_path;
+	Absolute_path const abs_path(path, cwd().string());
 
-	if (resolve_symlinks_except_last_element(path, resolved_path).failed())
+	if (resolve_symlinks_except_last_element(procfs().resolve_proc_self(abs_path).string(),
+	                                         resolved_path).failed())
 		return -1;
 
 	resolved_path.remove_trailing('/');
@@ -739,6 +760,8 @@ static int _open(Libc::Fds::Bits &bits, Libc::Fds::Space &space,
 				File_descriptor &new_fd = *new (fs()._kernel_heap)
 					File_descriptor(space, libc_fd, od, path);
 
+				procfs().add_fd_file(libc_fd, new_fd.path);
+
 				new_fd.flags = flags;
 				return libc_fd;
 			},
@@ -754,6 +777,8 @@ static int _open(Libc::Fds::Bits &bits, Libc::Fds::Space &space,
 
 		File_descriptor &new_fd = *new (fs()._kernel_heap)
 			File_descriptor(space, libc_fd, of, path);
+
+		procfs().add_fd_file(libc_fd, new_fd.path);
 
 		new_fd.flags = flags;
 
@@ -792,6 +817,8 @@ __SYS_(int, open, (const char *pathname, int flags, ...),
 	} catch (Absolute_path::Path_too_long) {
 		return Errno(ENAMETOOLONG);
 	}
+
+	next_iteration_working_path = procfs().resolve_proc_self(next_iteration_working_path);
 
 	enum { FOLLOW_LIMIT = 10 };
 	int follow_count = 0;
@@ -997,9 +1024,11 @@ extern "C" ssize_t readlink(const char *path, char *buf, ::size_t bufsiz)
 	if (path[0] == '\0')
 		return Errno(ENOENT);
 
-	Absolute_path resolved_path;
+	Absolute_path       resolved_path;
+	Absolute_path const abs_path(path, cwd().string());
 
-	if (resolve_symlinks_except_last_element(path, resolved_path).failed())
+	if (resolve_symlinks_except_last_element(
+				procfs().resolve_proc_self(abs_path).string(), resolved_path).failed())
 		return -1;
 
 	return fs().readlink(resolved_path.base(), buf, bufsiz);
@@ -1066,9 +1095,11 @@ extern "C" int stat(const char *path, struct stat *buf)
 	if (path[0] == '\0')
 		return Errno(ENOENT);
 
-	Absolute_path resolved_path;
+	Absolute_path       resolved_path;
+	Absolute_path const abs_path(path, cwd().string());
 
-	if (resolve_symlinks(path, resolved_path).failed())
+	if (resolve_symlinks(procfs().resolve_proc_self(abs_path).string(),
+	                     resolved_path).failed())
 		return -1;
 
 	resolved_path.remove_trailing('/');
@@ -1085,9 +1116,11 @@ extern "C" int symlink(const char *oldpath, const char *newpath)
 	if ((oldpath[0] == '\0') || (newpath[0] == '\0'))
 		return Errno(ENOENT);
 
-	Absolute_path resolved_path;
+	Absolute_path       resolved_path;
+	Absolute_path const abs_newpath(newpath, cwd().string());
 
-	if (resolve_symlinks_except_last_element(newpath, resolved_path).failed())
+	if (resolve_symlinks_except_last_element(
+				procfs().resolve_proc_self(abs_newpath).string(), resolved_path).failed())
 		return -1;
 
 	return fs().symlink(oldpath, resolved_path.base());

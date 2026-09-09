@@ -39,6 +39,7 @@
 #include <internal/rtc.h>
 #include <internal/config.h>
 #include <internal/fds.h>
+#include <internal/procfs.h>
 
 namespace Libc {
 	class Kernel;
@@ -210,6 +211,8 @@ struct Libc::Kernel final : Vfs::Read_ready_response_handler,
 			._vfs              = _vfs_root.fs(),
 			._root_dir         = _root_dir
 		};
+
+		Procfs _procfs { _fs, _config };
 
 		Constructible<Rtc> _rtc { };
 

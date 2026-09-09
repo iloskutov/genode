@@ -13,7 +13,7 @@ LIBS  += base vfs
 #
 SRC_CC = atexit.cc dummies.cc rlimit.cc sysctl.cc \
          issetugid.cc errno.cc time.cc alarm.cc \
-         malloc.cc progname.cc fds.cc file_operations.cc \
+         malloc.cc progname.cc procfs.cc fds.cc file_operations.cc \
          select.cc exit.cc environ.cc sleep.cc \
          pread_pwrite.cc readv_writev.cc poll.cc \
          fs.cc dynamic_linker.cc signal.cc \

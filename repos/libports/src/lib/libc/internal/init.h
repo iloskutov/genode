@@ -47,6 +47,7 @@ namespace Libc {
 	struct Atexit;
 	struct Vfs_plugin;
 	struct Fs;
+	struct Procfs;
 
 	/**
 	 * Support for shared libraries
@@ -61,7 +62,7 @@ namespace Libc {
 	/**
 	 * file system access
 	 */
-	void init_file_operations(Cwd &, Fds &, Fs &, Config const &);
+	void init_file_operations(Cwd &, Fds &, Fs &, Config const &, Procfs &);
 	void init_pread_pwrite(Fds &);
 
 	/**

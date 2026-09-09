@@ -195,6 +195,8 @@ void Libc::Child_config::_generate(Generator &g, Node const &config, Fs &fs, Fds
 				g.attribute("socket", node.attribute_value("socket", Path()));
 			if (node.has_attribute("rng"))
 				g.attribute("rng", node.attribute_value("rng", Path()));
+			if (node.has_attribute("proc"))
+				g.attribute("proc", node.attribute_value("proc", Path()));
 
 			node.with_optional_sub_node("passwd", [&] (Node const &node) {
 				g.node("passwd", [&] () { copy_attributes(g, node); }); });

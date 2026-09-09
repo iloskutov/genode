@@ -221,6 +221,8 @@ void Libc::Kernel::_init_file_descriptors()
 							File_descriptor &new_fd = *new (_heap)
 								File_descriptor(space, libc_fd, of, path.string());
 
+							_procfs.add_fd_file_from_kernel(libc_fd, path);
+
 							new_fd.flags   = flags;
 							new_fd.cloexec = node.attribute_value("cloexec", false);
 
@@ -531,7 +533,7 @@ Libc::Kernel::Kernel(Genode::Env &env, Genode::Allocator &heap)
 	          *this, _signal, _binary_name);
 	init_execve(_env, _heap, _user_stack, *this, *this, _binary_name, _fds);
 	init_sleep(*this);
-	init_file_operations(*this, _fds, _fs, _config);
+	init_file_operations(*this, _fds, _fs, _config, _procfs);
 	init_pread_pwrite(_fds);
 	init_time(*this, *this);
 	init_alarm(_timer_accessor, _signal);

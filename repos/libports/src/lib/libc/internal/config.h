@@ -31,7 +31,7 @@ struct Libc::Config
 
 	bool   update_mtime, cloned;
 	pid_t  pid;
-	Path   rtc, rng, pipe, socket, nameserver;
+	Path   rtc, rng, pipe, proc, socket, nameserver;
 	size_t stack_size;
 	Align  mmap_align;
 
@@ -57,6 +57,7 @@ struct Libc::Config
 			.rtc          = libc.attribute_value("rtc",    Path()),
 			.rng          = libc.attribute_value("rng",    Path()),
 			.pipe         = libc.attribute_value("pipe",   Path()),
+			.proc         = libc.attribute_value("proc",   Path()),
 			.socket       = socket,
 			.nameserver   = libc.attribute_value("nameserver_file",
 			                                     default_nameserver),

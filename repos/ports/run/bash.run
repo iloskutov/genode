@@ -131,11 +131,14 @@ config | verbose: yes
 
 + start /bin/bash | caps: 1000 | ram: 30M
   + config | ld_verbose: yes
-  | + libc | pipe: /pipe | rtc: /dev/rtc
+  | + libc | pipe: /pipe | rtc: /dev/rtc | proc: /proc
   |        | stdin:  /dev/terminal
   |        | stdout: /dev/terminal
   |        | stderr: /dev/terminal
-  | + vfs | + fs
+  | + vfs
+  |   + fs
+  |   + dir dev | + symlink fd | target: /proc/self/fd
+  |   + dir proc | + ram
   | + arg bash
   | + env TERM | : screen
   | + env PATH | : /bin

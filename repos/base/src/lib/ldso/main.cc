@@ -311,7 +311,8 @@ Elf::Addr Ld::jmp_slot(Dependency const &dep, Elf::Size index)
 		                   dep.obj().dynamic().pltrel(), index);
 		return slot.target_addr();
 	} catch (Linker::Not_found &symbol) {
-		error("LD: jump slot relocation failed for symbol: '", symbol, "'");
+		error("LD: symbol not found: '", symbol, "'",
+		      " required by '", dep.obj().name(), "'");
 		throw;
 	} catch (...) {
 		error("LD: jump slot relocation failed:: '", Current_exception(), "'");

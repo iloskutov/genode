@@ -44,7 +44,7 @@ struct Vfs_null::File_system : Single_file_system
 			Single_vfs_handle(ds, alloc, 0)
 		{ }
 
-		Read_result read(At, Byte_range_ptr const &) override { return 0; }
+		Read_result read(At, Byte_range_ptr const &) override { return Read_eof(); }
 
 		Write_result write(At, Const_byte_range_ptr const &src) override
 		{

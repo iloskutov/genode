@@ -258,7 +258,7 @@ class Vfs_ram::File : public Vfs_ram::Node
 			size_t const chunk_used_size = _chunk.used_size();
 
 			if (seek.value >= _length)
-				return 0;
+				return Vfs_handle::Read_eof();
 
 			/*
 			 * Constrain read transaction to available chunk data

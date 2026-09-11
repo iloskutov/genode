@@ -68,8 +68,8 @@ class Vfs_glyphs::File_system : public Single_file_system
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
-				if (at.pos > FILE_SIZE)
-					return Read_error::DENIED;
+				if (at.pos >= FILE_SIZE)
+					return Read_eof();
 
 				Codepoint const codepoint { uint32_t(at.pos / Vfs_font::GLYPH_SLOT_BYTES) };
 

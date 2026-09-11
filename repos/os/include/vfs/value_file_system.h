@@ -50,8 +50,8 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
-				if (at.pos > _buffer.length())
-					return Read_error::DENIED;
+				if (at.pos >= _buffer.length())
+					return Read_eof();
 
 				char const * const src = _buffer.string() + at.pos;
 				size_t const len = min((size_t)(_buffer.length() - at.pos), dst.num_bytes);

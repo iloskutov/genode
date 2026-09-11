@@ -280,7 +280,7 @@ class Vfs_block::Data_file_system : public Single_file_system
 							block_count = Block_count { _block_count.blocks - block_number };
 
 						if (block_number >= _block_count.blocks || block_count.blocks == 0)
-							return 0ul;
+							return Read_eof();
 
 						Block::Operation const op {
 							.type         = Block::Operation::Type::READ,

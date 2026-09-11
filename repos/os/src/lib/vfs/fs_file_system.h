@@ -483,14 +483,13 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				return Sync_result::RETRY;
 			}
 
-			bool update_modification_timestamp(Timestamp time) override
+			Update_mtime_result update_mtime(Timestamp time) override
 			{
 				::File_system::Session::Tx::Source &source = *_fs._fs.tx();
 				using ::File_system::Packet_descriptor;
 
-				if (!source.ready_to_submit()) {
-					return false;
-				}
+				if (!source.ready_to_submit())
+					return Update_mtime_result::RETRY;
 
 				try {
 					Packet_descriptor p(source.alloc_packet(0),
@@ -500,11 +499,11 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 					                       .ms_since_1970 = time.ms_since_1970 });
 
 					_fs._submit_packet(p);
-				} catch (::File_system::Session::Tx::Source::Packet_alloc_failed) {
-					return false;
 				}
+				catch (::File_system::Session::Tx::Source::Packet_alloc_failed) {
+					return Update_mtime_result::RETRY; }
 
-				return true;
+				return Update_mtime_result::OK;
 			}
 
 			void notify_read_ready() override

@@ -93,7 +93,7 @@ struct Vfs_ram::Io_handle final : Vfs_handle, private List<Io_handle>::Element
 
 	inline Ftruncate_result ftruncate(file_size) override;
 	inline Sync_result sync() override;
-	inline bool update_modification_timestamp(Timestamp) override;
+	inline Update_mtime_result update_mtime(Timestamp) override;
 };
 
 
@@ -128,11 +128,11 @@ class Vfs_ram::Node : private Avl_node<Node>
 
 		List<Io_handle> _io_handles { };
 
-		Timestamp _modification_time { };
-
 		bool _marked_as_unlinked = false;
 
 	public:
+
+		Timestamp mtime { };
 
 		Node(char const *node_name) { name(node_name); }
 
@@ -155,14 +155,6 @@ class Vfs_ram::Node : private Avl_node<Node>
 		void mark_as_unlinked() { _marked_as_unlinked = true; }
 
 		bool marked_as_unlinked() const { return _marked_as_unlinked; }
-
-		bool update_modification_timestamp(Timestamp time)
-		{
-			_modification_time = time;
-			return true;
-		}
-
-		Timestamp modification_time() const { return _modification_time; }
 
 		Node_rwx rwx() const
 		{
@@ -660,7 +652,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 				.type              = dirent_type(),
 				.rwx               = node.rwx(),
 				.device            = (addr_t)this,
-				.modification_time = node.modification_time()
+				.modification_time = node.mtime
 			};
 
 			return STAT_OK;
@@ -747,7 +739,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 			if (Node * node = lookup(path)) {
 				/* update timestamp of existing directory */
 				if (Directory *dir = dynamic_cast<Directory*>(node)) {
-					dir->update_modification_timestamp(ts);
+					dir->mtime = ts;
 					return Mkdir_result::UPDATED;
 				}
 				return Mkdir_result::DENIED; /* conflict with file or symlink */
@@ -757,7 +749,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 				Directory &dir = *new (_env.alloc()) Directory(name);
 				parent->adopt(&dir);
 				_notify_compound_dir_watchers(path);
-				dir.update_modification_timestamp(ts);
+				dir.mtime = ts;
 			}
 			catch (Out_of_caps) { return Mkdir_result::DENIED; }
 			catch (Out_of_ram)  { return Mkdir_result::DENIED; }
@@ -787,7 +779,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 				/* update target and timestamp of existing symlink */
 				if (Symlink *symlink = dynamic_cast<Symlink*>(node)) {
 					symlink->target = target;
-					symlink->update_modification_timestamp(ts);
+					symlink->mtime = ts;
 					return Symlink_result::UPDATED;
 				}
 				return Symlink_result::DENIED; /* conflict with file or dir */
@@ -796,7 +788,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 			Symlink &symlink = *new (_env.alloc()) Symlink(name);
 			parent->adopt(&symlink);
 			symlink.target = target;
-			symlink.update_modification_timestamp(ts);
+			symlink.mtime = ts;
 
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
@@ -912,14 +904,13 @@ Vfs_ram::Sync_result Vfs_ram::Io_handle::sync()
 }
 
 
-bool Vfs_ram::Io_handle::update_modification_timestamp(Timestamp time)
+Genode::Vfs::Vfs_handle::Update_mtime_result Vfs_ram::Io_handle::update_mtime(Timestamp ts)
 {
-	if (!writeable())
-		return false;
-
-	modifying = true;
-
-	return node.update_modification_timestamp(time);
+	if (writeable()) {
+		modifying = true;
+		node.mtime = ts;
+	}
+	return Update_mtime_result::OK;
 }
 
 #endif /* _INCLUDE__VFS__RAM_FILE_SYSTEM_H_ */

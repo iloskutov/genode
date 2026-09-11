@@ -294,7 +294,7 @@ class Vfs_server::Io_node : public Vfs_server::Node_base
 		{
 			_packet.with_timestamp([&] (::File_system::Timestamp const time) {
 				Vfs::Timestamp ts { .ms_since_1970 = time.ms_since_1970 };
-				vfs_handle.update_modification_timestamp(ts);
+				vfs_handle.update_mtime(ts);
 			});
 			_ack_successful_packet(0, _payload_ptr);
 
@@ -303,12 +303,15 @@ class Vfs_server::Io_node : public Vfs_server::Node_base
 
 		void _execute_mtime(Vfs::File_handle &handle)
 		{
+			bool retry = false;
 			_packet.with_timestamp([&] (::File_system::Timestamp const time) {
 				Vfs::Timestamp ts { .ms_since_1970 = time.ms_since_1970 };
-				handle.write_mtime(ts);
-			});
-			_ack_successful_packet(0, _payload_ptr);
+				if (handle.update_mtime(ts) == Vfs::Update_mtime_result::RETRY)
+					retry = true; });
+			if (retry)
+				return;
 
+			_ack_successful_packet(0, _payload_ptr);
 			_modified = true;
 		}
 

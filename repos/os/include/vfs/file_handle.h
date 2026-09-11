@@ -177,7 +177,7 @@ class Genode::Vfs::File_handle : Noncopyable
 		/**
 		 * Update the modification time of the file
 		 */
-		inline Write_mtime_result write_mtime(Timestamp t);
+		inline Update_mtime_result update_mtime(Timestamp t);
 
 		/**
 		 * Initiate or complete sync operation
@@ -269,20 +269,20 @@ Genode::Vfs::Resize_result Genode::Vfs::File_handle::resize(file_size num_bytes)
 }
 
 
-Genode::Vfs::Write_mtime_result Genode::Vfs::File_handle::write_mtime(Timestamp t)
+Genode::Vfs::Update_mtime_result Genode::Vfs::File_handle::update_mtime(Timestamp t)
 {
 	if (!writeable)
-		return Write_mtime_result::DENIED;
+		return Update_mtime_result::OK;
 
 	return _with_channel(
 		[&] (Channel &channel) {
 			_need_sync = true;
-			if (channel.update_modification_timestamp(t))
-				return Write_mtime_result::OK;
-			return Write_mtime_result::DENIED;
+			if (channel.update_mtime(t) == Vfs_handle::Update_mtime_result::OK)
+				return Update_mtime_result::OK;
+			return Update_mtime_result::RETRY;
 		},
-		[&] (Attach_error e) -> Write_mtime_result {
-			return _converted<Write_mtime_result>(e);
+		[&] (Attach_error e) -> Update_mtime_result {
+			return _converted<Update_mtime_result>(e);
 		});
 }
 

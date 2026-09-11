@@ -196,7 +196,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 				return Sync_result::OK;
 			}
 
-			bool update_modification_timestamp(Timestamp time) override
+			Update_mtime_result update_mtime(Timestamp time) override
 			{
 				struct timespec ts[2] = {
 					{
@@ -210,7 +210,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 
 				/* silently igore error */
 				rump_sys_futimens(attr.fd, (const timespec*)&ts);
-				return true;
+				return Update_mtime_result::OK;
 			}
 		};
 

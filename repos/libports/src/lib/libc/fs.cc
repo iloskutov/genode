@@ -341,7 +341,7 @@ struct Sync
 	{
 		switch (state) {
 		case INITIAL:
-			if (handle.write_mtime(mtime) == Genode::Vfs::Write_mtime_result::RETRY)
+			if (handle.update_mtime(mtime) == Genode::Vfs::Update_mtime_result::RETRY)
 				return false;
 			state = TIMESTAMP_UPDATED; [[ fallthrough ]];
 		case TIMESTAMP_UPDATED:

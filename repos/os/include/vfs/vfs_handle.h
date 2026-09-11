@@ -157,8 +157,6 @@ class Genode::Vfs::Vfs_handle
 
 		struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
 
-		enum class Write_mtime_result { OK, RETRY, DENIED };
-
 		enum Ftruncate_result { FTRUNCATE_ERR_NO_PERM,  FTRUNCATE_ERR_INTERRUPT,
 		                        FTRUNCATE_ERR_NO_SPACE, FTRUNCATE_OK };
 
@@ -208,14 +206,23 @@ class Genode::Vfs::Vfs_handle
 		 */
 		virtual Sync_result sync() { return Sync_result::OK; }
 
+		enum class Update_mtime_result { OK, RETRY };
+
 		/**
 		 * Update the modification time of a file
 		 *
-		 * \return true if update attempt was successful
+		 * Note that the return value does not reflect whether the modification
+		 * time is captured and held by the targeted file system. A file system
+		 * that discards the information still returns OK. Typical scenarios
+		 * where the modification time is updated as a side effect, like when a
+		 * modified file is closed, would not reflect this condition to the
+		 * application-level anyway. In other cases where the integrity of
+		 * modification times is assumed, a subsequent 'stat' shall be used
+		 * confirm the effect of the update.
 		 */
-		virtual bool update_modification_timestamp(Timestamp)
+		virtual Update_mtime_result update_mtime(Timestamp)
 		{
-			return true;
+			return Update_mtime_result::OK;
 		}
 };
 

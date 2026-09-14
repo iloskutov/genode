@@ -600,7 +600,7 @@ Packet_result Interface::_adapt_eth(Ethernet_frame          &eth,
 	{
 		auto send_arp_fn = [&]
 		{
-			Packet_list_element &packet_le = *new (_alloc) Packet_list_element(pkt);
+			Packet_list_element &packet_le = *new (_alloc) Packet_list_element(pkt, _alloc);
 			auto create_new_arp_waiter = [&]
 			{
 				new (_alloc) Arp_waiter(
@@ -1509,7 +1509,7 @@ void Interface::_handle_arp_reply(Ethernet_frame &eth,
 				Arp_waiter &waiter = *waiter_le->object();
 				waiter_le = waiter_le->next();
 				if (ip != waiter.ip()) { continue; }
-				waiter.flush_packets(waiter.src()._alloc, [&] (Packet_descriptor const &packet) {
+				waiter.flush_packets([&] (Packet_descriptor const &packet) {
 					waiter.src()._continue_handle_eth(packet); });
 				destroy(waiter.src()._alloc, &waiter);
 			}
@@ -1754,7 +1754,7 @@ void Interface::_destroy_timed_out_arp_waiters()
 {
 	while (Arp_waiter_list_element *le = _timed_out_arp_waiters.first()) {
 		Arp_waiter &waiter = *le->object();
-		waiter.flush_packets(_alloc, [&] (Packet_descriptor const &packet) {
+		waiter.flush_packets([&] (Packet_descriptor const &packet) {
 			_drop_packet(packet, "ARP request timed out"); });
 		_timed_out_arp_waiters.remove(le);
 		destroy(_alloc, &waiter);
@@ -2293,7 +2293,7 @@ void Interface::_ack_packet(Packet_descriptor const &pkt)
 void Interface::cancel_arp_waiting(Arp_waiter &waiter)
 {
 
-	waiter.flush_packets(_alloc, [&] (Packet_descriptor const &packet) {
+	waiter.flush_packets([&] (Packet_descriptor const &packet) {
 		_drop_packet(packet, "ARP got cancelled"); });
 	destroy(_alloc, &waiter);
 }

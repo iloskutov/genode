@@ -41,8 +41,11 @@ namespace Net {
 struct Net::Packet_list_element : Genode::List<Packet_list_element>::Element
 {
 	Packet_descriptor const packet;
+	Genode::Deallocator    &dealloc;
 
-	Packet_list_element(Packet_descriptor const &packet) : packet(packet) { }
+	Packet_list_element(Packet_descriptor const &packet,
+	                    Genode::Deallocator     &dealloc)
+	: packet(packet), dealloc(dealloc) { }
 };
 
 
@@ -85,12 +88,12 @@ class Net::Arp_waiter
 
 		void add_packet(Packet_list_element &le) { _packets.insert(&le); }
 
-		void flush_packets(Genode::Deallocator &dealloc, auto const &fn)
+		void flush_packets(auto const &fn)
 		{
 			while (Packet_list_element *le = _packets.first()) {
 				_packets.remove(le);
 				fn(le->packet);
-				destroy(dealloc, le);
+				destroy(le->dealloc, le);
 			}
 		}
 

@@ -216,7 +216,9 @@ sound/soc/intel/common/sof-function-topology-lib.h
 sound/soc/sof/intel/ext_manifest.h
 sound/soc/sof/intel/hda-ipc.h
 sound/soc/sof/intel/hda.h
+sound/soc/sof/intel/lnl.h
 sound/soc/sof/intel/mtl.h
+sound/soc/sof/intel/ptl.h
 sound/soc/sof/intel/shim.h
 sound/soc/sof/intel/telemetry.h
 sound/soc/sof/ipc3-priv.h

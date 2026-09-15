@@ -330,7 +330,6 @@ bool __dma_need_sync(struct device * dev,dma_addr_t dma_addr)
 
 
 const struct dma_map_ops *dma_ops = NULL;
-const guid_t guid_null;
 
 
 #include <linux/auxiliary_bus.h>
@@ -496,5 +495,14 @@ enum snd_soc_acpi_intel_codec snd_soc_acpi_intel_detect_codec_type(struct device
 
 int pcim_request_all_regions(struct pci_dev *pdev, const char *name)
 {
+	return 0;
+}
+
+
+#include <linux/ratelimit_types.h>
+
+int ___ratelimit(struct ratelimit_state * rs,const char * func)
+{
+	lx_emul_trace(__func__);
 	return 0;
 }

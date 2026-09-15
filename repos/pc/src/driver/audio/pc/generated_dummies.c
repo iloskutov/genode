@@ -7,14 +7,6 @@
 #include <lx_emul.h>
 
 
-#include <linux/ratelimit_types.h>
-
-int ___ratelimit(struct ratelimit_state * rs,const char * func)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/acpi.h>
 
 int __acpi_node_get_property_reference(const struct fwnode_handle * fwnode,const char * propname,size_t index,size_t num_args,struct fwnode_reference_args * args)
@@ -453,11 +445,6 @@ bool gfp_pfmemalloc_allowed(gfp_t gfp_mask)
 {
 	lx_emul_trace_and_stop(__func__);
 }
-
-
-#include <linux/uuid.h>
-
-const u8 guid_index[16] = {};
 
 
 #include <linux/i2c.h>
@@ -1132,11 +1119,6 @@ void update_group_capacity(struct sched_domain * sd,int cpu)
 {
 	lx_emul_trace_and_stop(__func__);
 }
-
-
-#include <linux/uuid.h>
-
-const u8 uuid_index[16] = {};
 
 
 #include <linux/mm.h>

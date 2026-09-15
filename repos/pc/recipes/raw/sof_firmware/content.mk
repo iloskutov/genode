@@ -15,7 +15,9 @@ ucode_files:
 	         mkdir -p intel/sof-ipc4 && \
 	         mkdir -p intel/sof-ipc4/arl && \
 	         mkdir -p intel/sof-ipc4/mtl && \
-	         mkdir -p intel/sof-tplg
+	         mkdir -p intel/sof-ipc4/ptl && \
+	         mkdir -p intel/sof-tplg && \
+	         mkdir -p intel/sof-ipc4-tplg
 	$(VERBOSE)cp $(SOF_DIR)/sof-adl.ri intel/sof/sof-adl.ri
 	$(VERBOSE)cp $(SOF_DIR)/sof-cml.ri intel/sof/sof-cml.ri
 	$(VERBOSE)cp $(SOF_DIR)/sof-cnl.ri intel/sof/sof-cnl.ri
@@ -24,7 +26,10 @@ ucode_files:
 	$(VERBOSE)cp $(SOF_TPLG_DIR)/sof-hda-generic-2ch.tplg intel/sof-tplg
 	$(VERBOSE)cp $(SOF_IPC4_DIR)/arl/sof-arl.ri intel/sof-ipc4/arl/sof-arl.ri
 	$(VERBOSE)cp $(SOF_IPC4_DIR)/mtl/sof-mtl.ri intel/sof-ipc4/mtl/sof-mtl.ri
+	$(VERBOSE)cp $(SOF_IPC4_DIR)/ptl/sof-ptl.ri intel/sof-ipc4/ptl/sof-ptl.ri
+	$(VERBOSE)cp $(SOF_IPC4_DIR)/ptl/sof-ptl-openmodules.ri intel/sof-ipc4/ptl/sof-ptl-openmodules.ri
 	$(VERBOSE)cp $(SOF_IPC4_TPLG_DIR)/sof-hda-generic-2ch.tplg intel/sof-ace-tplg
+	$(VERBOSE)cp $(SOF_IPC4_TPLG_DIR)/sof-hda-generic-2ch.tplg intel/sof-ipc4-tplg
 
 LICENSE.Intel:
 	cp $(PORT_DIR)/firmware/LICENCE.Intel $@

@@ -90,6 +90,7 @@ lib/sort.c
 lib/string.c
 lib/string_helpers.c
 lib/timerqueue.c
+lib/uuid.c
 lib/vsprintf.c
 lib/xarray.c
 mm/memblock.c
@@ -172,6 +173,7 @@ sound/soc/intel/common/soc-acpi-intel-sdca-quirks.c
 sound/soc/intel/common/soc-acpi-intel-sdw-mockup-match.c
 sound/soc/intel/common/soc-acpi-intel-skl-match.c
 sound/soc/intel/common/soc-acpi-intel-tgl-match.c
+sound/soc/intel/common/soc-acpi-intel-ptl-match.c
 sound/soc/intel/common/sof-function-topology-lib.c
 sound/soc/sdca/sdca_device.c
 sound/soc/soc-ac97.c
@@ -210,9 +212,12 @@ sound/soc/sof/intel/hda-stream.c
 sound/soc/sof/intel/hda-trace.c
 sound/soc/sof/intel/hda.c
 sound/soc/sof/intel/icl.c
+sound/soc/sof/intel/lnl.c
 sound/soc/sof/intel/mtl.c
 sound/soc/sof/intel/pci-mtl.c
 sound/soc/sof/intel/pci-tgl.c
+sound/soc/sof/intel/pci-ptl.c
+sound/soc/sof/intel/ptl.c
 sound/soc/sof/intel/tgl.c
 sound/soc/sof/iomem-utils.c
 sound/soc/sof/ipc.c

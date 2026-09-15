@@ -167,6 +167,7 @@ option
   + managed | max_ram: 40M | max_caps: 400 | disable: while_suspended
   + config
   | + libc | stdout: /dev/log | stderr: /dev/null | rtc: /dev/rtc
+  |        | rng: /dev/urandom
   | + vfs
   |   + dir dev
   |     + null
@@ -175,7 +176,7 @@ option
   |     + null
   |     + jitterentropy random
   |     + jitterentropy urandom
-  |   + inline rtc | : 2018-01-01 00:01
+  |     + inline rtc | : 2018-01-01 00:01
   |   + dir firmware
   |     + tar pc_wifi_firmware.tar
   + connect

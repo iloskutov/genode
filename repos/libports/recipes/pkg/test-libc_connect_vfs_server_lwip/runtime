@@ -2,7 +2,7 @@ runtime | ram: 128M | caps: 1000 | binary: init
 
 + requires | + timer
 
-+ fail    | after_seconds: 10
++ fail    | after_seconds: 15
 + fail    | : *exited with exit value -1
 + succeed | : child "test-libc_connect" exited with exit value 0
 

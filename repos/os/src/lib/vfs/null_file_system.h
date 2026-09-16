@@ -37,11 +37,13 @@ struct Vfs_null::File_system : Single_file_system
 		})
 	{ }
 
-	struct Null_vfs_handle : Single_vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
-		Null_vfs_handle(Directory_service &ds, Allocator &alloc)
+		Allocator &_alloc;
+
+		File_channel(Allocator &alloc, Attr attr)
 		:
-			Single_vfs_handle(ds, alloc, 0)
+			Vfs::File_channel(attr), _alloc(alloc)
 		{ }
 
 		Read_result read(At, Byte_range_ptr const &) override { return Read_eof(); }
@@ -55,21 +57,18 @@ struct Vfs_null::File_system : Single_file_system
 		bool write_ready() const override { return true; }
 
 		Resize_result resize(file_size) override { return Resize_result::OK; }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
-	Open_result open(char const  *path, unsigned,
-	                 Vfs_handle **out_handle,
-	                 Allocator   &alloc) override
+	Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 
-		try {
-			*out_handle = new (alloc) Null_vfs_handle(*this, alloc);
-			return OPEN_OK;
-		}
-		catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-		catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+		try { return *new (alloc) File_channel(alloc, { .writeable = attr.writeable }); }
+		catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+		catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 	}
 
 	static constexpr auto BUILTIN_FS_TYPE = "null";

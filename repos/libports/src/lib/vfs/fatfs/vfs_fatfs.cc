@@ -16,7 +16,6 @@
  */
 
 /* Genode includes */
-#include <vfs/vfs_handle.h>
 #include <vfs/env.h>
 #include <os/path.h>
 
@@ -42,30 +41,30 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 
 		using Path = Genode::Path<FF_MAX_LFN>;
 
-		struct Fatfs_file_handle;
+		struct File_channel;
 		struct Fatfs_dir_channel;
 		struct Fatfs_file_watch_handle;
 		struct Fatfs_dir_watch_handle;
 
-		using Fatfs_file_handles      = List<Fatfs_file_handle>;
+		using File_channels           = List<File_channel>;
 		using Fatfs_dir_watch_handles = List<Fatfs_dir_watch_handle>;
 		using Fatfs_watch_handles     = List<Fatfs_file_watch_handle>;
 
 		/**
 		 * The FatFS library does not support opening a file
 		 * for writing twice, so this plugin manages a tree of
-		 * open files shared across open VFS handles.
+		 * open files shared across open file channels.
 		 */
 
 		struct File : Avl_node<File>
 		{
 			Path                path;
 			FIL                 fil;
-			Fatfs_file_handles  handles;
+			File_channels       channels;
 			Fatfs_watch_handles watchers;
 
 			bool opened() const {
-				return (handles.first() || watchers.first()); }
+				return (channels.first() || watchers.first()); }
 
 			/************************
 			 ** Avl node interface **
@@ -85,21 +84,36 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			}
 		};
 
-		struct Fatfs_handle : Vfs_handle
+		struct File_channel : Vfs::File_channel, File_channels::Element
 		{
-			using Vfs_handle::Vfs_handle;
-		};
-
-		struct Fatfs_file_handle : Fatfs_handle, Fatfs_file_handles::Element
-		{
+			Allocator   &_alloc;
 			File_system &_fs;
+
 			File *file = nullptr;
 			bool modifying = false;
 
-			Fatfs_file_handle(File_system &fs, Allocator &alloc, int status_flags)
+			File_channel(Allocator &alloc, Attr attr, File_system &fs)
 			:
-				Fatfs_handle(fs, alloc, status_flags), _fs(fs)
+				Vfs::File_channel(attr), _alloc(alloc), _fs(fs)
 			{ }
+
+			~File_channel()
+			{
+				if (!file)
+					return;
+
+				file->channels.remove(this);
+
+				bool notify = false;
+				if (file->opened()) {
+					notify = modifying;
+				} else {
+					_fs._close(*file);
+				}
+
+				if (notify)
+					_fs._notify(*file);
+			}
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
 			{
@@ -107,8 +121,6 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 					error("Vfs_fatfs: Read_error::DENIED");
 					return Read_error::DENIED;
 				}
-				if ((status_flags()&OPEN_MODE_ACCMODE) == OPEN_MODE_WRONLY)
-					return Read_error::DENIED;
 
 				FIL *fil = &file->fil;
 				FRESULT fres = f_lseek(fil, at.pos);
@@ -122,8 +134,8 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 
 			Write_result write(At const at, Const_byte_range_ptr const &src) override
 			{
-				if (!file)        return Write_error::DENIED;
-				if (!writeable()) return Write_error::DENIED;
+				if (!file)      return Write_error::DENIED;
+				if (!writeable) return Write_error::DENIED;
 
 				FRESULT fres = FR_OK;
 				FIL *fil = &file->fil;
@@ -160,8 +172,8 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 
 			Resize_result resize(file_size len) override
 			{
-				if (!file)        return Resize_result::DENIED;
-				if (!writeable()) return Resize_result::DENIED;
+				if (!file)      return Resize_result::DENIED;
+				if (!writeable) return Resize_result::DENIED;
 
 				FIL *fil = &file->fil;
 				FRESULT res = FR_OK;
@@ -191,7 +203,7 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			}
 
 			/**
-			 * Notify other handles if this handle has modified its file.
+			 * Notify other channels if this channels has modified its file.
 			 *
 			 * Files are flushed to blocks after every write.
 			 */
@@ -199,12 +211,14 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			{
 				if (file && modifying) {
 					modifying = false;
-					file->handles.remove(this);
+					file->channels.remove(this);
 					_fs._notify(*file);
-					file->handles.insert(this);
+					file->channels.insert(this);
 				}
 				return Sync_result::OK;
 			}
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		struct Fatfs_dir_channel : Vfs::Dir_channel
@@ -319,17 +333,17 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 		}
 
 		/**
-		 * Invalidate all handles on a FatFS file
+		 * Invalidate all channels on a FatFS file
 		 * and close the file
 		 */
 		void _close_all(File &file)
 		{
-			/* invalidate handles */
-			for (auto *handle = file.handles.first();
-			     handle; handle = file.handles.first())
+			/* invalidate channels */
+			for (auto *handle = file.channels.first();
+			     handle; handle = file.channels.first())
 			{
 				handle->file = nullptr;
-				file.handles.remove(handle);
+				file.channels.remove(handle);
 			}
 
 			_close(file);
@@ -372,44 +386,36 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 
 		void destruct() override { destroy(_vfs_env.alloc(), this); }
 
-		Open_result open(char const *path, unsigned vfs_mode,
-		                 Vfs_handle **vfs_handle,
-		                 Allocator  &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			Fatfs_file_handle *handle;
-
 			File *file = _opened_file(path);
 
-			bool create = vfs_mode & OPEN_MODE_CREATE;
-
-			if (file && create) {
-				return OPEN_ERR_EXISTS;
-			}
+			if (file && attr.create)
+				return Open_error::DENIED;
 
 			if (file && f_error(&file->fil)) {
 				error("FatFS: hard error on file '", path, "'");
-				return OPEN_ERR_NO_PERM;
+				return Open_error::DENIED;
 			};
 
 			/* attempt allocation before modifying blocks */
 			if (!_next_file)
 				_next_file = new (_vfs_env.alloc()) File();
-			handle = new (alloc) Fatfs_file_handle(*this, alloc, vfs_mode);
+
+			File_channel &channel = *new (alloc)
+				File_channel(alloc, { .writeable = attr.writeable }, *this);
 
 			if (!file) {
 				file = _next_file;
 				FRESULT fres = f_open(
 					&_next_file->fil, (TCHAR const *)path,
-					FA_READ | FA_WRITE | (create ? FA_CREATE_NEW : FA_OPEN_EXISTING));
+					FA_READ | FA_WRITE | (attr.create ? FA_CREATE_NEW : FA_OPEN_EXISTING));
 				if (fres != FR_OK) {
-					destroy(alloc, handle);
-					switch(fres) {
-					case FR_NO_FILE:
-					case FR_NO_PATH:      return OPEN_ERR_UNACCESSIBLE;
-					case FR_EXIST:        return OPEN_ERR_EXISTS;
-					case FR_INVALID_NAME: return OPEN_ERR_NAME_TOO_LONG;
-					default:              return OPEN_ERR_NO_PERM;
-					}
+					channel.destruct();
+					/*
+					 * We might distinguish FR_NO_FILE, FR_NO_PATH, FR_EXIST, FR_INVALID_NAME
+					 */
+					return Open_error::DENIED;
 				}
 
 				file->path.import(path);
@@ -417,13 +423,12 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				_next_file = nullptr;
 			}
 
-			if (create)
+			if (attr.create)
 				_notify_parent_of(path);
 
-			file->handles.insert(handle);
-			handle->file = file;
-			*vfs_handle = handle;
-			return OPEN_OK;
+			file->channels.insert(&channel);
+			channel.file = file;
+			return channel;
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -445,29 +450,6 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			catch (Out_of_ram)  { error = Opendir_error::OUT_OF_RAM;  }
 			catch (Out_of_caps) { error = Opendir_error::OUT_OF_CAPS; }
 			return error;
-		}
-
-		void close(Vfs_handle *vfs_handle) override
-		{
-			auto *handle = dynamic_cast<Fatfs_file_handle *>(vfs_handle);
-			bool notify = false;
-
-			if (handle) {
-				File *file = handle->file;
-				if (file) {
-					file->handles.remove(handle);
-					if (file->opened()) {
-						notify = handle->modifying;
-					} else {
-						_close(*file);
-					}
-				}
-				destroy(handle->alloc(), handle);
-
-				if (notify)
-					_notify(*file);
-				return;
-			}
 		}
 
 		Dataspace_capability dataspace(char const *path) override

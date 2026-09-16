@@ -80,7 +80,7 @@ class Vfs_block::File
 		File& operator=(const File&) = delete;
 
 		Vfs::File_system &_vfs;
-		Vfs::Vfs_handle  *_vfs_handle;
+		Vfs::File_channel *_file_channel = nullptr;
 
 		Constructible<Vfs_block::Job> _job { };
 
@@ -99,29 +99,26 @@ class Vfs_block::File
 		     File_info               const &info,
 		     Block::Constrained_view const &view)
 		:
-			_vfs         { vfs },
-			_vfs_handle  { nullptr },
-			_view        { view }
+			_vfs(vfs), _view(view)
 		{
 			using DS = Vfs::Directory_service;
 
-			unsigned const mode =
-				info.writeable ? DS::OPEN_MODE_RDWR
-				               : DS::OPEN_MODE_RDONLY;
+			DS::Open_attr const attr { .writeable = info.writeable, .create = false };
 
-			using Open_result = DS::Open_result;
-			Open_result res = _vfs.open(info.path.string(), mode,
-			                            &_vfs_handle, alloc);
-			if (res != Open_result::OPEN_OK) {
-				error("Could not open '", info.path.string(), "'");
-				throw Genode::Exception();
-			}
+			_vfs.open(info.path.string(), attr, alloc).with_result(
+				[&] (Vfs::File_channel &c) { _file_channel = &c; },
+				[&] (Vfs::Open_error) {
+					error("Could not open '", info.path.string(), "'");
+					throw Genode::Exception();
+				}
+			);
 
 			using Stat_result = DS::Stat_result;
 			Vfs::Directory_service::Stat stat { };
 			Stat_result stat_res = _vfs.stat(info.path.string(), stat);
 			if (stat_res != Stat_result::STAT_OK) {
-				_vfs.close(_vfs_handle);
+				if (_file_channel) _file_channel->destruct();
+				_file_channel = nullptr;
 				error("Could not stat '", info.path.string(), "'");
 				throw Genode::Exception();
 			}
@@ -163,7 +160,7 @@ class Vfs_block::File
 			 * Sync is expected to be done through the Block
 			 * request stream, omit it here.
 			 */
-			_vfs.close(_vfs_handle);
+			if (_file_channel) _file_channel->destruct();
 		}
 
 		Block::block_count_t transfer_block_count_limit() const {
@@ -219,7 +216,7 @@ class Vfs_block::File
 			file_size const base_offset =
 				req.operation.block_number * _block_info.block_size;
 
-			_job.construct(*_vfs_handle, req, base_offset,
+			_job.construct(*_file_channel, req, base_offset,
 			               reinterpret_cast<char*>(ptr), length);
 		}
 

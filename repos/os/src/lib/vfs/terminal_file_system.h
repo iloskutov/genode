@@ -102,36 +102,26 @@ class Vfs_terminal::Data_file_system : public Single_file_system
 			}
 		}
 
-		struct Terminal_vfs_handle : Single_vfs_handle
-		{
-			Terminal::Connection &_terminal;
-			Vfs::Env::User       &_vfs_user;
-			Read_buffer          &_read_buffer;
-			Interrupt_handler    &_interrupt_handler;
+		struct File_channel;
+		using File_channels = Registry<File_channel>;
 
-			bool const _raw;
+		struct File_channel : Vfs::File_channel
+		{
+			Allocator   &_alloc;
+			Data_file_system &_fs;
+
+			File_channels::Element const _elem;
 
 			bool notifying = false;
 
-			Terminal_vfs_handle(Terminal::Connection &terminal,
-			                    Vfs::Env::User       &vfs_user,
-			                    Read_buffer          &read_buffer,
-			                    Interrupt_handler    &interrupt_handler,
-			                    Directory_service    &ds,
-			                    Allocator            &alloc,
-			                    int                   flags,
-			                    bool                  raw)
+			File_channel(Allocator &alloc, Attr attr, Data_file_system &fs)
 			:
-				Single_vfs_handle(ds, alloc, flags),
-				_terminal(terminal),
-				_vfs_user(vfs_user),
-				_read_buffer(read_buffer),
-				_interrupt_handler(interrupt_handler),
-				_raw(raw)
+				Vfs::File_channel(attr),
+				_alloc(alloc), _fs(fs), _elem(fs._file_channels, *this)
 			{ }
 
 			bool read_ready() const override {
-				return !_read_buffer.empty(); }
+				return !_fs._read_buffer.empty(); }
 
 			bool write_ready() const override { return true; }
 
@@ -139,32 +129,31 @@ class Vfs_terminal::Data_file_system : public Single_file_system
 
 			Read_result read(At, Byte_range_ptr const &dst) override
 			{
-				if (_read_buffer.empty())
-					_fetch_data_from_terminal(_terminal, _read_buffer,
-					                          _interrupt_handler, _raw);
+				if (_fs._read_buffer.empty())
+					_fetch_data_from_terminal(_fs._terminal, _fs._read_buffer,
+					                          _fs._interrupt_handler, _fs._raw);
 
-				if (_read_buffer.empty())
+				if (_fs._read_buffer.empty())
 					return Read_error::RETRY;
 
 				unsigned consumed = 0;
-				for (; consumed < dst.num_bytes && !_read_buffer.empty(); consumed++)
-					dst.start[consumed] = _read_buffer.get();
+				for (; consumed < dst.num_bytes && !_fs._read_buffer.empty(); consumed++)
+					dst.start[consumed] = _fs._read_buffer.get();
 
 				return consumed;
 			}
 
 			Write_result write(At, Const_byte_range_ptr const &src) override
 			{
-				return _terminal.write(src.start, src.num_bytes);
+				return _fs._terminal.write(src.start, src.num_bytes);
 			}
 
 			Resize_result resize(file_size) override { return Resize_result::OK; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
-		using Registered_handle = Registered<Terminal_vfs_handle>;
-		using Handle_registry   = Registry<Registered_handle>;
-
-		Handle_registry _handle_registry { };
+		File_channels _file_channels { };
 
 		Io_signal_handler<Data_file_system> _read_avail_handler {
 			_ep, *this, &Data_file_system::_handle_read_avail };
@@ -187,10 +176,10 @@ class Vfs_terminal::Data_file_system : public Single_file_system
 			_fetch_data_from_terminal(_terminal, _read_buffer, _interrupt_handler,
 			                          _raw);
 
-			_handle_registry.for_each([] (Registered_handle &handle) {
-				if (handle.notifying) {
-					handle.notifying = false;
-					handle.read_ready_response();
+			_file_channels.for_each([] (File_channel &c) {
+				if (c.notifying) {
+					c.notifying = false;
+					c.read_ready_response();
 				}
 			});
 
@@ -222,22 +211,17 @@ class Vfs_terminal::Data_file_system : public Single_file_system
 
 		static const char *name() { return "data"; }
 
-		Open_result open(char const  *path, unsigned flags,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Registered_handle(_handle_registry, _terminal, _vfs_user,
-					                  _read_buffer, _interrupt_handler,
-					                  *this, alloc, flags, _raw);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, *this);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 

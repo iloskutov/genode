@@ -32,17 +32,18 @@ namespace Vfs_gpu
 
 struct Vfs_gpu::File_system : Single_file_system
 {
-	struct Gpu_vfs_handle : Single_vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
 		/* allow for initial read to query the ID */
 		bool             _complete { true };
+		Allocator       &_alloc;
 		Vfs::Env        &_env;
 		Gpu::Connection  _gpu_session { _env.env() };
 
-		Io_signal_handler<Gpu_vfs_handle> _completion_sigh {
-			_env.env().ep(), *this, &Gpu_vfs_handle::_handle_completion };
+		Io_signal_handler<File_channel> _completion_sigh {
+			_env.env().ep(), *this, &File_channel::_handle_completion };
 
-		using Id_space = Genode::Id_space<Gpu_vfs_handle>;
+		using Id_space = Genode::Id_space<File_channel>;
 
 		Id_space::Element const _elem;
 
@@ -52,13 +53,10 @@ struct Vfs_gpu::File_system : Single_file_system
 			_env.user().wakeup_vfs_user();
 		}
 
-		Gpu_vfs_handle(Vfs::Env &env,
-		               Directory_service &ds,
-		               Allocator &alloc,
-		               Id_space &space)
+		File_channel(Allocator &alloc, Vfs::Env &env, Id_space &space)
 		:
-			Single_vfs_handle(ds, alloc, 0),
-			_env(env), _elem(*this, space)
+			Vfs::File_channel({ .writeable = false }),
+			_alloc(alloc), _env(env), _elem(*this, space)
 		{
 			_gpu_session.completion_sigh(_completion_sigh);
 		}
@@ -82,13 +80,15 @@ struct Vfs_gpu::File_system : Single_file_system
 		bool write_ready() const override { return true; }
 
 		Id_space::Id id() const { return _elem.id(); }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
 	Vfs::Env &_env;
 
 	using Config = String<32>;
 
-	Id_space<Gpu_vfs_handle> _handle_space { };
+	Id_space<File_channel> _handle_space { };
 
 	File_system(Vfs::Env &env, Parent_fs &parent_fs, Node const &config)
 	:
@@ -102,23 +102,14 @@ struct Vfs_gpu::File_system : Single_file_system
 
 	void destruct() override { destroy(_env.alloc(), this); }
 
-	Open_result open(char const  *path, unsigned,
-	                 Vfs::Vfs_handle **out_handle,
-	                 Allocator   &alloc) override
+	Open_result open(char const *path, Open_attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 
-		try {
-			Gpu_vfs_handle *handle  = new (alloc)
-				Gpu_vfs_handle(_env, *this, alloc, _handle_space);
-
-			*out_handle = handle;
-
-			return OPEN_OK;
-		}
-		catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-		catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+		try { return *new (alloc) File_channel(alloc, _env, _handle_space); }
+		catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+		catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 	}
 };
 
@@ -133,16 +124,12 @@ Gpu::Connection *vfs_gpu_connection(unsigned long id)
 {
 	if (!_fs) return nullptr;
 
-	using Gpu_vfs_handle = Vfs_gpu::File_system::Gpu_vfs_handle;
-	using Id_space       = Genode::Id_space<Gpu_vfs_handle>;
+	using File_channel = Vfs_gpu::File_system::File_channel;
+	using Id_space     = Genode::Id_space<File_channel>;
 
 	try {
-		return _fs->_handle_space.apply<Gpu_vfs_handle>(
-			Id_space::Id { .value = id },
-			[] (Gpu_vfs_handle &handle)
-			{
-				return &handle._gpu_session;
-			}
+		return _fs->_handle_space.apply<File_channel>(Id_space::Id { .value = id },
+			[] (File_channel &c) { return &c._gpu_session; }
 		);
 	} catch (...) { }
 

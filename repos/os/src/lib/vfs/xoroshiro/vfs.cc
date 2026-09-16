@@ -175,19 +175,16 @@ struct Vfs_xoroshiro::File_system : Single_file_system
 	Directory       _root_dir;
 	File_path const _seed_file_path;
 
-	struct Xoroshiro_vfs_handle : Single_vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
+		Allocator                   &_alloc;
 		File_entropy_source          _entropy_src;
-		Xoroshiro_128_plus_reseeding _xoroshiro;
+		Xoroshiro_128_plus_reseeding _xoroshiro { _entropy_src };
 
-		Xoroshiro_vfs_handle(Directory_service    &ds,
-		                     Allocator            &alloc,
-		                     Directory            &root_dir,
-		                     File_path      const &seed_file)
+		File_channel(Allocator &alloc, Directory &root_dir, File_path const &seed_file)
 		:
-			Single_vfs_handle { ds, alloc, 0 },
-			_entropy_src      { root_dir, seed_file },
-			_xoroshiro        { _entropy_src }
+			Vfs::File_channel({ .writeable = false }),
+			_alloc(alloc), _entropy_src(root_dir, seed_file)
 		{ }
 
 		Read_result read(At, Byte_range_ptr const &dst) override
@@ -208,6 +205,8 @@ struct Vfs_xoroshiro::File_system : Single_file_system
 
 		bool read_ready()  const override { return true; }
 		bool write_ready() const override { return false; }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
 	File_system(Vfs::Env &vfs_env, Parent_fs &parent_fs, Node const &config)
@@ -224,12 +223,10 @@ struct Vfs_xoroshiro::File_system : Single_file_system
 
 	void destruct() override { destroy(_alloc, this); }
 
-	Open_result open(char const  *path, unsigned,
-	                 Vfs_handle **out_handle,
-	                 Allocator   &alloc) override
+	Open_result open(char const *path, Open_attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 
 		try {
 			/*
@@ -239,14 +236,12 @@ struct Vfs_xoroshiro::File_system : Single_file_system
 			 * which will fail.
 			 */
 
-			*out_handle = new (alloc)
-				Xoroshiro_vfs_handle(*this, alloc, _root_dir, _seed_file_path);
-			return OPEN_OK;
+			return *new (alloc) File_channel(alloc, _root_dir, _seed_file_path);
 		}
-		catch (Out_of_ram)        { return OPEN_ERR_OUT_OF_RAM; }
-		catch (Out_of_caps)       { return OPEN_ERR_OUT_OF_CAPS; }
+		catch (Out_of_ram)        { return Open_error::OUT_OF_RAM; }
+		catch (Out_of_caps)       { return Open_error::OUT_OF_CAPS; }
 		/* handled non-existing path */
-		catch (Genode::File::Open_failed) { return OPEN_ERR_UNACCESSIBLE; }
+		catch (Genode::File::Open_failed) { return Open_error::DENIED; }
 	}
 };
 

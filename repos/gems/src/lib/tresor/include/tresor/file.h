@@ -213,14 +213,7 @@ template <typename HOST_STATE>
 struct Tresor::Read_write_file : public File<HOST_STATE>
 {
 	Read_write_file(HOST_STATE &host_state, Vfs::Env &env, Tresor::Path const &path)
-	: File<HOST_STATE>(host_state, env, path, Vfs::Directory_service::OPEN_MODE_RDWR) { }
-};
-
-template <typename HOST_STATE>
-struct Tresor::Write_only_file : public File<HOST_STATE>
-{
-	Write_only_file(HOST_STATE &host_state, Vfs::Env &env, Tresor::Path const &path)
-	: File<HOST_STATE>(host_state, env, path, Vfs::Directory_service::OPEN_MODE_WRONLY) { }
+	: File<HOST_STATE>(host_state, env, path) { }
 };
 
 #endif /* _TRESOR__FILE_H_ */

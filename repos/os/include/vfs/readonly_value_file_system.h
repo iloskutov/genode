@@ -36,15 +36,15 @@ class Genode::Vfs::Readonly_value_file_system : public Single_file_system
 
 		Buffer _buffer { };
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator    &_alloc;
 			Buffer const &_buffer;
 
-			Vfs_handle(Directory_service &ds,
-			           Allocator         &alloc,
-			           Buffer      const &buffer)
+			File_channel(Allocator &alloc, Buffer const &buffer)
 			:
-				Single_vfs_handle(ds, alloc, 0), _buffer(buffer)
+				Vfs::File_channel({ .writeable = false }),
+				_alloc(alloc), _buffer(buffer)
 			{ }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -61,6 +61,8 @@ class Genode::Vfs::Readonly_value_file_system : public Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return false; }
+
+			virtual void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -92,20 +94,14 @@ class Genode::Vfs::Readonly_value_file_system : public Single_file_system
 		 ** Directory-service interface **
 		 *********************************/
 
-		Open_result open(char const *path, unsigned, Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			try {
-				*out_handle = new (alloc)
-					Vfs_handle(*this, alloc, _buffer);
-
-				return OPEN_OK;
-			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, _buffer); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -114,8 +110,6 @@ class Genode::Vfs::Readonly_value_file_system : public Single_file_system
 			out.size = _buffer.length();
 			return result;
 		}
-
-		using Single_file_system::close;
 };
 
 #endif /* _INCLUDE__VFS__READONLY_VALUE_FILE_SYSTEM_H_ */

@@ -452,19 +452,19 @@ struct Vfs_oss::Audio
 			return false;
 		}
 
-		Vfs_handle::Read_result read(Byte_range_ptr const &dst)
+		File_channel::Read_result read(Byte_range_ptr const &dst)
 		{
 			_start_input();
 
 			if (_info.ifrag_bytes == 0)
-				return Vfs_handle::Read_error::RETRY; /* block */
+				return File_channel::Read_error::RETRY; /* block */
 
 			size_t const buf_size = min(dst.num_bytes, _info.ifrag_bytes);
 
 			unsigned samples_to_read = buf_size / CHANNELS / sizeof(int16_t);
 
 			if (samples_to_read == 0)
-				return Vfs_handle::Read_error::DENIED; /* invalid argument */
+				return File_channel::Read_error::DENIED; /* invalid argument */
 
 			Audio_in::Stream *stream = _in->stream();
 
@@ -514,14 +514,14 @@ struct Vfs_oss::Audio
 			return out_size;
 		}
 
-		Vfs_handle::Write_result write(Const_byte_range_ptr const &src)
+		File_channel::Write_result write(Const_byte_range_ptr const &src)
 		{
 			using namespace Genode;
 
 			size_t out_size = 0;
 
 			if (_info.ofrag_bytes == 0)
-				return Vfs_handle::Write_error::RETRY;
+				return File_channel::Write_error::RETRY;
 
 			bool block_write = false;
 
@@ -535,7 +535,7 @@ struct Vfs_oss::Audio
 			unsigned stream_samples_to_write = buf_size / CHANNELS / sizeof(int16_t);
 
 			if (stream_samples_to_write == 0)
-				return Vfs_handle::Write_error::DENIED;
+				return File_channel::Write_error::DENIED;
 
 			_start_output();
 
@@ -608,7 +608,7 @@ struct Vfs_oss::Audio
 						update_info_ofrag_avail_from_optr_fifo_samples();
 
 						if (block_write)
-							return Vfs_handle::Write_error::RETRY;
+							return File_channel::Write_error::RETRY;
 
 						return out_size;
 					}
@@ -631,19 +631,16 @@ class Vfs_oss::Data_file_system : public Single_file_system
 		Vfs::Env::User     &_vfs_user;
 		Audio              &_audio;
 
-		struct Oss_vfs_handle : public Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			Audio &_audio;
+			Allocator &_alloc;
+			Audio     &_audio;
 
 			bool blocked = false;
 
-			Oss_vfs_handle(Directory_service &ds,
-			               Genode::Allocator &alloc,
-			               int                flags,
-			               Audio             &audio)
+			File_channel(Genode::Allocator &alloc, Attr attr, Audio &audio)
 			:
-				Single_vfs_handle { ds, alloc, flags },
-				_audio { audio }
+				Vfs::File_channel(attr), _alloc(alloc), _audio(audio)
 			{ }
 
 			Read_result read(At, Byte_range_ptr const &dst) override
@@ -655,7 +652,7 @@ class Vfs_oss::Data_file_system : public Single_file_system
 					return 0;
 
 				Read_result result = _audio.read(dst);
-				if (result == Vfs_handle::Read_error::RETRY)
+				if (result == File_channel::Read_error::RETRY)
 					blocked = true;
 
 				return result;
@@ -665,7 +662,7 @@ class Vfs_oss::Data_file_system : public Single_file_system
 			{
 				Write_result const result = _audio.write(src);
 
-				if (result == Vfs_handle::Write_error::RETRY) {
+				if (result == File_channel::Write_error::RETRY) {
 					blocked = true;
 					return result;
 				}
@@ -677,21 +674,12 @@ class Vfs_oss::Data_file_system : public Single_file_system
 				return Resize_result::OK;
 			}
 
-			bool read_ready() const override
-			{
-				return _audio.read_ready();
-			}
+			bool read_ready() const override { return _audio.read_ready(); }
 
-			bool write_ready() const override
-			{
-				return _audio.write_ready();
-			}
+			bool write_ready() const override { return _audio.write_ready(); }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
-
-		using Registered_handle = Genode::Registered<Oss_vfs_handle>;
-		using Handle_registry   = Genode::Registry<Registered_handle>;
-
-		Handle_registry _handle_registry { };
 
 		Io_signal_handler<Data_file_system> _audio_out_progress_sigh {
 			_ep, *this, &Data_file_system::_handle_audio_out_progress };
@@ -732,21 +720,17 @@ class Vfs_oss::Data_file_system : public Single_file_system
 			_audio.in_progress_sigh(_audio_in_progress_sigh);
 		}
 
-		Open_result open(char const  *path, unsigned flags,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			if (!_single_file(path)) {
-				return OPEN_ERR_UNACCESSIBLE;
-			}
+			if (!_single_file(path))
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Registered_handle(_handle_registry, *this, alloc, flags, _audio);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, _audio);
 			}
-			catch (Genode::Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Genode::Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Genode::Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Genode::Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 

@@ -13,7 +13,6 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
-#include <vfs/vfs_handle.h>
 #include <vfs/env.h>
 #include <os/path.h>
 #include <os/ring_buffer.h>
@@ -24,25 +23,23 @@ namespace Vfs_pipe {
 	using namespace Genode;
 	using namespace Genode::Vfs;
 
-	using Open_result = Directory_service::Open_result;
-	using Path        = Path<MAX_PATH_LEN>;
+	using Path = Path<MAX_PATH_LEN>;
 
 	enum { PIPE_BUF_SIZE = 8192U };
 	using Pipe_buffer = Ring_buffer<unsigned char, PIPE_BUF_SIZE+1>;
 
-	struct Pipe_handle;
+	struct File_channel;
 	struct Dir_channel;
 
-	using Handle_element = Fifo_element<Pipe_handle>;
-	using Handle_fifo    = Fifo<Handle_element>;
+	using File_channel_fifo_element = Fifo_element<File_channel>;
+	using File_channel_fifo         = Fifo<File_channel_fifo_element>;
 
-	using Pipe_handle_registry_element = Registry<Pipe_handle>::Element;
-	using Pipe_handle_registry         = Registry<Pipe_handle>;
+	using File_channels = Registry<File_channel>;
 
 	struct Pipe;
 	using Pipe_space = Id_space<Pipe>;
 
-	struct New_pipe_handle;
+	struct New_file_channel;
 
 	class File_system;
 	class Pipe_file_system;
@@ -50,27 +47,23 @@ namespace Vfs_pipe {
 }
 
 
-struct Vfs_pipe::Pipe_handle : Vfs_handle, private Pipe_handle_registry_element
+struct Vfs_pipe::File_channel : Vfs::File_channel, private File_channels::Element
 {
+	Allocator &_alloc;
+
 	Pipe &pipe;
 
-	Handle_element read_ready_elem { *this };
+	File_channel_fifo_element read_ready_elem { *this };
 
-	bool const writer;
+	bool const writer = Vfs::File_channel::writeable;
 
-	Pipe_handle(Vfs::File_system &fs,
-	            Allocator &alloc,
-	            unsigned flags,
-	            Pipe_handle_registry &registry,
-	            Pipe &p)
+	File_channel(Allocator &alloc, Attr attr, File_channels &channels, Pipe &p)
 	:
-		Vfs_handle(fs, alloc, flags),
-		Pipe_handle_registry_element(registry, *this),
-		pipe(p),
-		writer(flags == Directory_service::OPEN_MODE_WRONLY)
+		Vfs::File_channel(attr), File_channels::Element(channels, *this),
+		_alloc(alloc), pipe(p)
 	{ }
 
-	virtual ~Pipe_handle();
+	virtual ~File_channel();
 
 	Write_result write(At, Const_byte_range_ptr const &) override;
 	Read_result  read(At, Byte_range_ptr const &) override;
@@ -80,6 +73,8 @@ struct Vfs_pipe::Pipe_handle : Vfs_handle, private Pipe_handle_registry_element
 	bool read_ready()  const override;
 	bool write_ready() const override;
 	void notify_read_ready() override;
+
+	void destruct() override { destroy(_alloc, this); }
 };
 
 
@@ -91,16 +86,17 @@ struct Vfs_pipe::Pipe
 
 	Pipe_space::Element  space_elem;
 	Pipe_buffer          buffer { };
-	Pipe_handle_registry registry { };
 
-	Handle_fifo read_ready_waiters { };
+	File_channels file_channels { };
+
+	File_channel_fifo read_ready_waiters { };
 
 	unsigned num_writers = 0;
 	bool waiting_for_writers = true;
 
 	Io_signal_handler<Pipe> _read_notify_handler { env.ep(), *this, &Pipe::notify_read };
 
-	bool new_handle_active { true };
+	bool new_channel_active = true;
 
 	Pipe(Genode::Env &env, Vfs::Env::User &vfs_user,
 	     Allocator &alloc, Pipe_space &space)
@@ -118,7 +114,7 @@ struct Vfs_pipe::Pipe
 
 	void notify_read()
 	{
-		read_ready_waiters.dequeue_all([] (Handle_element &elem) {
+		read_ready_waiters.dequeue_all([] (File_channel_fifo_element &elem) {
 			elem.object().read_ready_response(); });
 	}
 
@@ -137,36 +133,31 @@ struct Vfs_pipe::Pipe
 	 */
 	void cleanup()
 	{
-		bool alive = new_handle_active;
+		bool alive = new_channel_active;
 		if (!alive)
-			registry.for_each([&alive] (Pipe_handle&) {
-				alive = true; });
+			file_channels.for_each([&alive] (File_channel &) { alive = true; });
 		if (!alive)
 			destroy(alloc, this);
 	}
 
 	/**
-	 * Remove "/new" handle reference
+	 * Remove "/new" channel reference
 	 */
-	void remove_new_handle() {
-		new_handle_active = false; }
+	void remove_new_channel() { new_channel_active = false; }
 
 	/**
-	 * Detach a handle
+	 * Detach a channel
 	 */
-	void remove(Pipe_handle &handle)
+	void remove(File_channel &c)
 	{
-		if (handle.read_ready_elem.enqueued())
-			read_ready_waiters.remove(handle.read_ready_elem);
+		if (c.read_ready_elem.enqueued())
+			read_ready_waiters.remove(c.read_ready_elem);
 	}
 
 	/**
-	 * Open a write or read handle
+	 * Open a write or read channel
 	 */
-	Open_result open(Vfs::File_system &fs,
-	                 Path const &filename,
-	                 Vfs::Vfs_handle **handle,
-	                 Allocator &alloc)
+	Open_result open(Path const &filename, Allocator &alloc)
 	{
 		if (filename == "/in") {
 
@@ -177,32 +168,32 @@ struct Vfs_pipe::Pipe
 
 				buffer.reset();
 			}
-			*handle = new (alloc)
-				Pipe_handle(fs, alloc, Directory_service::OPEN_MODE_WRONLY, registry, *this);
+			File_channel &c = *new (alloc)
+				File_channel(alloc, { .writeable = true }, file_channels, *this);
 			num_writers++;
 			waiting_for_writers = false;
-			return Open_result::OPEN_OK;
+			return c;
 		}
 
 		if (filename == "/out") {
-			*handle = new (alloc)
-				Pipe_handle(fs, alloc, Directory_service::OPEN_MODE_RDONLY, registry, *this);
+			File_channel &c = *new (alloc)
+				File_channel(alloc, { .writeable = false }, file_channels, *this);
 
 			if (0 == num_writers && buffer.empty()) {
 				waiting_for_writers = true;
 			}
-			return Open_result::OPEN_OK;
+			return c;
 		}
 
-		return Open_result::OPEN_ERR_UNACCESSIBLE;
+		return Open_error::DENIED;
 	}
 
-	Vfs_handle::Write_result write(Pipe_handle &, Const_byte_range_ptr const &src)
+	File_channel::Write_result write(File_channel &, Const_byte_range_ptr const &src)
 	{
 		size_t out = 0;
 
 		if (buffer.avail_capacity() == 0)
-			return Vfs_handle::Write_error::RETRY;
+			return File_channel::Write_error::RETRY;
 
 		char const *buf_ptr = src.start;
 		while (out < src.num_bytes && 0 < buffer.avail_capacity()) {
@@ -218,7 +209,7 @@ struct Vfs_pipe::Pipe
 		return out;
 	}
 
-	Vfs_handle::Read_result read(Pipe_handle &, Byte_range_ptr const &dst)
+	File_channel::Read_result read(File_channel &, Byte_range_ptr const &dst)
 	{
 		size_t out = 0;
 
@@ -232,9 +223,9 @@ struct Vfs_pipe::Pipe
 
 			/* Send only EOF when at least one writer opened the pipe */
 			if ((num_writers == 0) && !waiting_for_writers)
-				return Vfs_handle::Read_eof();
+				return File_channel::Read_eof();
 
-			return Vfs_handle::Read_error::RETRY;
+			return File_channel::Read_error::RETRY;
 		}
 
 		/* new pipe space may unblock the writer */
@@ -246,33 +237,44 @@ struct Vfs_pipe::Pipe
 };
 
 
-Vfs_pipe::Pipe_handle::~Pipe_handle()
+Vfs_pipe::File_channel::~File_channel()
 {
+	if (writer) {
+		pipe.num_writers--;
+
+		/* trigger reattempt of read to deliver EOF */
+		if (pipe.num_writers == 0)
+			pipe.submit_read_signal();
+	} else {
+		/* a close() may arrive before read() - make sure we deliver EOF */
+		pipe.waiting_for_writers = false;
+	}
 	pipe.remove(*this);
+	pipe.cleanup();
 }
 
 
-Vfs_pipe::Vfs_handle::Write_result
-Vfs_pipe::Pipe_handle::write(At, Const_byte_range_ptr const &src)
+Vfs_pipe::File_channel::Write_result
+Vfs_pipe::File_channel::write(At, Const_byte_range_ptr const &src)
 {
-	return Pipe_handle::pipe.write(*this, src);
+	return File_channel::pipe.write(*this, src);
 }
 
 
-Vfs_pipe::Vfs_handle::Read_result
-Vfs_pipe::Pipe_handle::read(At, Byte_range_ptr const &dst)
+Vfs_pipe::File_channel::Read_result
+Vfs_pipe::File_channel::read(At, Byte_range_ptr const &dst)
 {
-	return Pipe_handle::pipe.read(*this, dst);
+	return File_channel::pipe.read(*this, dst);
 }
 
 
-bool Vfs_pipe::Pipe_handle::read_ready() const
+bool Vfs_pipe::File_channel::read_ready() const
 {
 	return !writer && !pipe.buffer.empty();
 }
 
 
-bool Vfs_pipe::Pipe_handle::write_ready() const
+bool Vfs_pipe::File_channel::write_ready() const
 {
 	/*
 	 * Unconditionally return true for the writer side because
@@ -282,31 +284,32 @@ bool Vfs_pipe::Pipe_handle::write_ready() const
 }
 
 
-void Vfs_pipe::Pipe_handle::notify_read_ready()
+void Vfs_pipe::File_channel::notify_read_ready()
 {
 	if (!writer && !read_ready_elem.enqueued())
 		pipe.read_ready_waiters.enqueue(read_ready_elem);
 }
 
 
-struct Vfs_pipe::New_pipe_handle : Vfs_handle
+struct Vfs_pipe::New_file_channel : Vfs::File_channel
 {
-	Pipe &pipe;
+	Allocator &_alloc;
+	Pipe      &pipe;
 
-	New_pipe_handle(Vfs::File_system &fs,
-	                Genode::Env      &env,
-	                Vfs::Env::User   &vfs_user,
-	                Allocator        &alloc,
-	                unsigned          flags,
-	                Pipe_space       &pipe_space)
+	New_file_channel(Allocator  &alloc,
+	                 Vfs::Env   &env,
+	                 Attr        attr,
+	                 Pipe_space &pipe_space)
 	:
-		Vfs_handle(fs, alloc, flags),
-		pipe(*(new (alloc) Pipe(env, vfs_user, alloc, pipe_space)))
+		Vfs::File_channel(attr),
+		_alloc(alloc),
+		pipe(*(new (env.alloc()) Pipe(env.env(), env.user(), alloc, pipe_space)))
 	{ }
 
-	~New_pipe_handle()
+	~New_file_channel()
 	{
-		pipe.remove_new_handle();
+		pipe.remove_new_channel();
+		pipe.cleanup();
 	}
 
 	Read_result read(At, Byte_range_ptr const &dst) override
@@ -319,8 +322,10 @@ struct Vfs_pipe::New_pipe_handle : Vfs_handle
 		return Read_error::DENIED;
 	}
 
-	bool read_ready()  const override { return true; }
+	bool read_ready()  const override { return true;  }
 	bool write_ready() const override { return false; }
+
+	void destruct() override { destroy(_alloc, this); }
 };
 
 
@@ -355,15 +360,13 @@ class Vfs_pipe::File_system : public Vfs::File_system
 		 ** Directory service **
 		 ***********************/
 
-		Open_result open(const char *cpath, unsigned mode,
-		                 Vfs::Vfs_handle **handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *cpath, Open_attr attr, Allocator &alloc) override
 		{
 			/* distinguish reader from writer depending on the access mode */
-			bool const writer = (mode & OPEN_MODE_ACCMODE) != OPEN_MODE_RDONLY;
+			bool const writer = attr.writeable;
 
 			if (!_valid_path(cpath))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			Path const path { cpath };
 			if (!path.has_single_element()) {
@@ -374,45 +377,26 @@ class Vfs_pipe::File_system : public Vfs::File_system
 				Path io { cpath };
 				io.keep_only_last_element();
 
-				if (io == "/in"  && !writer) return OPEN_ERR_NO_PERM;
-				if (io == "/out" &&  writer) return OPEN_ERR_NO_PERM;
+				if (io == "/in"  && !writer) return Open_error::DENIED;
+				if (io == "/out" &&  writer) return Open_error::DENIED;
 			}
 
-			auto result { OPEN_ERR_UNACCESSIBLE };
+			Vfs::File_channel *channel_ptr = nullptr;
+			Open_error error = Open_error::DENIED;
+
 			Pipe_space::Id id { ~0UL };
-			if (_pipe_id(cpath, id)) {
+			if (_pipe_id(cpath, id))
 				_try_apply(id, [&] (Pipe &pipe) {
 					auto const type { writer ? "/in" : "/out" };
-					result = pipe.open(*this, type, handle, alloc);
+					pipe.open(type, alloc).with_result(
+						[&] (Vfs::File_channel &c) { channel_ptr = &c; },
+						[&] (Open_error e)         { error       = e;  });
 				});
-			}
 
-			return result;
-		}
+			if (channel_ptr)
+				return *channel_ptr;
 
-		void close(Vfs_handle *vfs_handle) override
-		{
-			Pipe *pipe = nullptr;
-			if (Pipe_handle *handle = dynamic_cast<Pipe_handle*>(vfs_handle)) {
-				pipe = &handle->pipe;
-				if (handle->writer) {
-					pipe->num_writers--;
-
-					/* trigger reattempt of read to deliver EOF */
-					if (pipe->num_writers == 0)
-						pipe->submit_read_signal();
-				} else {
-					/* a close() may arrive before read() - make sure we deliver EOF */
-					pipe->waiting_for_writers = false;
-				}
-			} else
-			if (New_pipe_handle *handle = dynamic_cast<New_pipe_handle*>(vfs_handle))
-				pipe = &handle->pipe;
-
-			destroy(vfs_handle->alloc(), vfs_handle);
-
-			if (pipe)
-				pipe->cleanup();
+			return error;
 		}
 
 		Stat_result stat(const char *cpath, Stat &out) override
@@ -532,20 +516,21 @@ class Vfs_pipe::Pipe_file_system : public Vfs_pipe::File_system
 
 		void destruct() override { destroy(_env.alloc(), this); }
 
-		Open_result open(const char *cpath,
-		                 unsigned mode,
-		                 Vfs::Vfs_handle **handle,
-		                 Allocator &alloc) override
+		Open_result open(const char *cpath, Open_attr attr, Allocator &alloc) override
 		{
 			Path const path { cpath };
 
 			if (path == "/new") {
-				*handle = new (alloc)
-					New_pipe_handle(*this, _env.env(), _env.user(), alloc, mode, _pipe_space);
-				return OPEN_OK;
+				try {
+					return *new (alloc)
+						New_file_channel(alloc, _env,
+						                 { .writeable = attr.writeable }, _pipe_space);
+				}
+				catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+				catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 			}
 
-			return File_system::open(cpath, mode, handle, alloc);
+			return Vfs_pipe::File_system::open(cpath, attr, alloc);
 		}
 
 		Stat_result stat(const char *cpath, Stat &out) override

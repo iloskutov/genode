@@ -107,25 +107,22 @@ class Vfs_inline::File_system : public Single_file_system
 
 		Buffered_data const _data;
 
-		class Handle : public Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			private:
+			Allocator &_alloc;
+			File_system const &_fs;
 
-				File_system const &_fs;
+			File_channel(Allocator &alloc, File_system const &fs)
+			:
+				Vfs::File_channel({ .writeable = false }), _alloc(alloc), _fs(fs)
+			{ }
 
-			public:
+			inline Read_result read(At, Byte_range_ptr const &) override;
 
-				Handle(Directory_service &ds,
-				       Allocator         &alloc,
-				       File_system const &inline_fs)
-				:
-					Single_vfs_handle(ds, alloc, 0), _fs(inline_fs)
-				{ }
+			bool read_ready()  const override { return true; }
+			bool write_ready() const override { return false; }
 
-				inline Read_result read(At, Byte_range_ptr const &) override;
-
-				bool read_ready()  const override { return true; }
-				bool write_ready() const override { return false; }
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -156,20 +153,14 @@ class Vfs_inline::File_system : public Single_file_system
 		 ** Directory service interface **
 		 ********************************/
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			try {
-				*out_handle = new (alloc) Handle(*this, alloc, *this);
-			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
-
-			return OPEN_OK;
+			try { return *new (alloc) File_channel(alloc, *this); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -187,8 +178,8 @@ class Vfs_inline::File_system : public Single_file_system
 };
 
 
-Genode::Vfs::Vfs_handle::Read_result
-Vfs_inline::File_system::Handle::read(At const at, Byte_range_ptr const &dst)
+Genode::Vfs::File_channel::Read_result
+Vfs_inline::File_system::File_channel::read(At const at, Byte_range_ptr const &dst)
 {
 	Read_result result = Read_eof();
 

@@ -104,11 +104,10 @@ class Vfs_tap::Data_file_system : public FS
 {
 	private:
 
-		using Local_vfs_handle  = typename FS::Vfs_handle;
-		using Label             = typename FS::Vfs_handle::Label;
-		using Registered_handle = Registered<Local_vfs_handle>;
-		using Handle_registry   = Registry<Registered_handle>;
-		using Open_result       = Directory_service::Open_result;
+		using Local_file_channel      = typename FS::File_channel;
+		using Label                   = typename FS::File_channel::Label;
+		using Registered_file_channel = Registered<Local_file_channel>;
+		using File_channels           = Registry<Registered_file_channel>;
 
 		Name             const &_name;
 		Label            const &_label;
@@ -116,7 +115,7 @@ class Vfs_tap::Data_file_system : public FS
 		Genode::Env            &_env;
 		Vfs::Env::User         &_vfs_user;
 		Device_update_handler  &_device_update_handler;
-		Handle_registry         _handle_registry { };
+		File_channels           _file_channels { };
 
 	public:
 
@@ -134,12 +133,12 @@ class Vfs_tap::Data_file_system : public FS
 		{ }
 
 		/* must only be called if handle has been opened */
-		Local_vfs_handle &device()
+		Local_file_channel &device()
 		{
-			Local_vfs_handle *dev = nullptr;
-			_handle_registry.for_each([&] (Local_vfs_handle &handle) {
+			Local_file_channel *dev = nullptr;
+			_file_channels.for_each([&] (Local_file_channel &handle) {
 				dev = &handle;
-			 });
+			});
 
 			struct Device_unavailable { };
 
@@ -156,29 +155,28 @@ class Vfs_tap::Data_file_system : public FS
 		 ** Directory service interface **
 		 *********************************/
 
-		Open_result open(char const  *path, unsigned flags,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		using Open_attr = Directory_service::Open_attr;
+
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!FS::_single_file(path))
-				return Open_result::OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			/* A tap device is exclusive open, thus return error if already opened. */
-			unsigned handles = 0;
-			_handle_registry.for_each([&handles] (Local_vfs_handle const &) {
-				handles++;
-			});
-			if (handles) return Open_result::OPEN_ERR_EXISTS;
+			bool opened = false;
+			_file_channels.for_each([&] (Local_file_channel const &) { opened = true; });
+			if (opened) return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Registered_handle(_handle_registry, _env, _vfs_user, alloc,
-					                  _label.string(), _default_mac, *this, flags);
+				Vfs::File_channel &c = *new (alloc)
+					Registered_file_channel(_file_channels, alloc,
+					                        Vfs::File_channel::Attr { .writeable = attr.writeable },
+					                        _env, _vfs_user, _label.string(), _default_mac);
 				_device_update_handler.device_state_changed();
-				return Open_result::OPEN_OK;
+				return c;
 			}
-			catch (Out_of_ram)  { return Open_result::OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return Open_result::OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 };
@@ -190,7 +188,7 @@ struct Vfs_tap::Compound_file_system : Union_file_system,
                                        private Device_update_handler
 {
 	using Name        = Vfs_tap::Name;
-	using Label       = typename FS::Vfs_handle::Label;
+	using Label       = typename FS::File_channel::Label;
 	using Name_fs     = Readonly_value_file_system<Name>;
 	using Mac_addr_fs = Mac_file_system;
 

@@ -29,26 +29,22 @@ namespace Vfs_nic {
 }
 
 
-class Vfs_nic::File_system : public Single_file_system
+struct Vfs_nic::File_system : Single_file_system
 {
-	public:
+	class File_channel;
 
-		class Nic_vfs_handle;
-
-		using Vfs_handle = Nic_vfs_handle;
-
-		File_system(Parent_fs &parent_fs, char const *name)
-		:
-			Single_file_system(parent_fs, {
-				.ident = { { "data ", name } },
-				.name  = name,
-				.rwx   = File::RW_TRANSACTIONAL
-			})
-		{ }
+	File_system(Parent_fs &parent_fs, char const *name)
+	:
+		Single_file_system(parent_fs, {
+			.ident = { { "data ", name } },
+			.name  = name,
+			.rwx   = File::RW_TRANSACTIONAL
+		})
+	{ }
 };
 
 
-class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
+class Vfs_nic::File_system::File_channel : public Vfs::File_channel
 {
 	public:
 
@@ -59,6 +55,7 @@ class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
 		static constexpr size_t PKT_SIZE = Nic::Packet_allocator::DEFAULT_PACKET_SIZE;
 		static constexpr size_t BUF_SIZE = Uplink::Session::QUEUE_SIZE * PKT_SIZE;
 
+		Allocator            &_alloc;
 		Genode::Env          &_env;
 		Vfs::Env::User       &_vfs_user;
 		Nic::Packet_allocator _pkt_alloc;
@@ -68,9 +65,9 @@ class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
 		bool _notifying = false;
 		bool _blocked   = false;
 
-		Io_signal_handler<Nic_vfs_handle> _link_state_handler { _env.ep(), *this, &Nic_vfs_handle::_handle_link_state};
-		Io_signal_handler<Nic_vfs_handle> _read_avail_handler { _env.ep(), *this, &Nic_vfs_handle::_handle_read_avail };
-		Io_signal_handler<Nic_vfs_handle> _ack_avail_handler  { _env.ep(), *this, &Nic_vfs_handle::_handle_ack_avail };
+		Io_signal_handler<File_channel> _link_state_handler { _env.ep(), *this, &File_channel::_handle_link_state};
+		Io_signal_handler<File_channel> _read_avail_handler { _env.ep(), *this, &File_channel::_handle_read_avail };
+		Io_signal_handler<File_channel> _ack_avail_handler  { _env.ep(), *this, &File_channel::_handle_ack_avail };
 
 		void _handle_ack_avail()
 		{
@@ -102,24 +99,22 @@ class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
 
 	public:
 
-		Nic_vfs_handle(Genode::Env            &env,
-		               Vfs::Env::User         &vfs_user,
-		               Allocator              &alloc,
-		               Label            const &label,
-		               Net::Mac_address const &,
-		               Directory_service      &ds,
-		               int                     flags)
-		: Single_vfs_handle  { ds, alloc, flags },
-		  _env(env),
-		  _vfs_user(vfs_user),
-		  _pkt_alloc(&alloc),
-		  _nic(_env, &_pkt_alloc, BUF_SIZE, BUF_SIZE, label.string())
+		File_channel(Allocator              &alloc,
+		             Attr                    attr,
+		             Genode::Env            &env,
+		             Vfs::Env::User         &vfs_user,
+		             Label            const &label,
+		             Net::Mac_address const &)
+		:
+			Vfs::File_channel(attr),
+			_alloc(alloc), _env(env), _vfs_user(vfs_user), _pkt_alloc(&alloc),
+			_nic(_env, &_pkt_alloc, BUF_SIZE, BUF_SIZE, label.string())
 		{
 			_nic.link_state_sigh(_link_state_handler);
 			_link_state = _nic.link_state();
-			_nic.tx_channel()->sigh_ack_avail      (_ack_avail_handler);
-			_nic.rx_channel()->sigh_ready_to_ack   (_read_avail_handler);
-			_nic.rx_channel()->sigh_packet_avail   (_read_avail_handler);
+			_nic.tx_channel()->sigh_ack_avail   (_ack_avail_handler);
+			_nic.rx_channel()->sigh_ready_to_ack(_read_avail_handler);
+			_nic.rx_channel()->sigh_packet_avail(_read_avail_handler);
 		}
 
 		void notify_read_ready() override { _notifying = true; }
@@ -135,7 +130,7 @@ class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
 
 		bool read_ready() const override
 		{
-			auto &nonconst_this = const_cast<Nic_vfs_handle &>(*this);
+			auto &nonconst_this = const_cast<File_channel &>(*this);
 			auto &rx = *nonconst_this._nic.rx();
 
 			return _link_state && rx.packet_avail() && rx.ready_to_ack();
@@ -201,6 +196,8 @@ class Vfs_nic::File_system::Nic_vfs_handle : public Single_vfs_handle
 				return Write_error::DENIED;
 			}
 		}
+
+		void destruct() override { destroy(_alloc, this); }
 };
 
 #endif /* _SRC__LIB__VFS__TAP__NIC_FILE_SYSTEM_H_ */

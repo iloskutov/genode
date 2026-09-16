@@ -50,7 +50,7 @@ namespace Vfs_block {
 			throw Invalid_state();
 		}
 
-		Genode::Vfs::Vfs_handle &_handle;
+		Genode::Vfs::File_channel &_file_channel;
 
 		Block::Request const request;
 		char           *data;
@@ -74,7 +74,7 @@ namespace Vfs_block {
 			[[fallthrough]];
 			case State::IN_PROGRESS:
 			{
-				using Result = Genode::Vfs::Vfs_handle::Read_result;
+				using Result = Genode::Vfs::File_channel::Read_result;
 
 				bool completed = false;
 
@@ -82,8 +82,8 @@ namespace Vfs_block {
 				                                   current_count };
 				Genode::Vfs::At const at { Genode::uint64_t(base_offset + current_offset) };
 
-				Result const result = _handle.read(at, dst);
-				if (result == Genode::Vfs::Vfs_handle::Read_error::RETRY)
+				Result const result = _file_channel.read(at, dst);
+				if (result == Genode::Vfs::File_channel::Read_error::RETRY)
 					return progress;
 
 				result.with_result(
@@ -92,7 +92,7 @@ namespace Vfs_block {
 						current_count  -= num_bytes;
 						success = true;
 					},
-					[&] (Genode::Vfs::Vfs_handle::Read_error) {
+					[&] (Genode::Vfs::File_channel::Read_error) {
 						success   = false;
 						completed = true;
 					});
@@ -130,7 +130,7 @@ namespace Vfs_block {
 			[[fallthrough]];
 			case State::IN_PROGRESS:
 			{
-				using Result = Genode::Vfs::Vfs_handle::Write_result;
+				using Result = Genode::Vfs::File_channel::Write_result;
 
 				bool completed = false;
 
@@ -138,9 +138,9 @@ namespace Vfs_block {
 				                                         current_count };
 				Genode::Vfs::At const at { Genode::uint64_t(base_offset + current_offset) };
 
-				Result result = _handle.write(at, src);
+				Result result = _file_channel.write(at, src);
 
-				if (result == Genode::Vfs::Vfs_handle::Write_error::RETRY)
+				if (result == Genode::Vfs::File_channel::Write_error::RETRY)
 					return progress;
 
 				result.with_result(
@@ -149,7 +149,7 @@ namespace Vfs_block {
 						current_count  -= num_bytes;
 						success = true;
 					},
-					[&] (Genode::Vfs::Vfs_handle::Write_error) {
+					[&] (Genode::Vfs::File_channel::Write_error) {
 						success = false;
 						completed = true;
 					});
@@ -185,7 +185,7 @@ namespace Vfs_block {
 			[[fallthrough]];
 			case State::IN_PROGRESS:
 			{
-				if (_handle.sync() == Genode::Vfs::Sync_result::RETRY)
+				if (_file_channel.sync() == Genode::Vfs::Sync_result::RETRY)
 					return progress;
 
 				success = true;
@@ -214,13 +214,13 @@ namespace Vfs_block {
 			return true;
 		}
 
-		Job(Genode::Vfs::Vfs_handle &handle,
+		Job(Genode::Vfs::File_channel &file_channel,
 		    Block::Request   request,
 		    file_size        base_offset,
 		    char            *data,
 		    size_t           length)
 		:
-			_handle        { handle },
+			_file_channel  { file_channel },
 			request        { request },
 			data           { data },
 			state          { _initial_state(request.operation.type) },

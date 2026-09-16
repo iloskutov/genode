@@ -62,13 +62,15 @@ struct Vfs_ram_log::File_system : Single_file_system
 
 	} _buffer;
 
-	struct Handle : Single_vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
+		Allocator   &_alloc;
 		File_system &_ram_log;
 
-		Handle(Directory_service &ds, Allocator &alloc, File_system &ram_log)
+		File_channel(Allocator &alloc, Attr attr, File_system &ram_log)
 		:
-			Single_vfs_handle { ds, alloc, 0 }, _ram_log(ram_log)
+			Vfs::File_channel(attr),
+			_alloc(alloc), _ram_log(ram_log)
 		{ }
 
 		Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -103,6 +105,8 @@ struct Vfs_ram_log::File_system : Single_file_system
 
 		bool read_ready()  const override { return true; }
 		bool write_ready() const override { return true; }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
 	File_system(Vfs::Env &vfs_env, Parent_fs &parent_fs, Node const &config)
@@ -118,20 +122,19 @@ struct Vfs_ram_log::File_system : Single_file_system
 
 	void destruct() override { destroy(_alloc, this); }
 
-	Open_result open(char const *path, unsigned, Vfs_handle **out_handle,
-	                 Allocator &alloc) override
+	Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 
 		try {
-			*out_handle = new (alloc) Handle(*this, alloc, *this);
-			return OPEN_OK;
+			return *new (alloc)
+				File_channel(alloc, { .writeable = attr.writeable }, *this);
 		}
-		catch (Genode::Out_of_ram)        { return OPEN_ERR_OUT_OF_RAM; }
-		catch (Genode::Out_of_caps)       { return OPEN_ERR_OUT_OF_CAPS; }
+		catch (Genode::Out_of_ram)        { return Open_error::OUT_OF_RAM; }
+		catch (Genode::Out_of_caps)       { return Open_error::OUT_OF_CAPS; }
 		/* handled non-existing path */
-		catch (Genode::File::Open_failed) { return OPEN_ERR_UNACCESSIBLE; }
+		catch (Genode::File::Open_failed) { return Open_error::DENIED; }
 	}
 
 	Stat_result stat(char const *path, Stat &out) override

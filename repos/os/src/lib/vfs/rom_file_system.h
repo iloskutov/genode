@@ -63,53 +63,51 @@ class Vfs_rom::File_system : public Single_file_system
 			_content_size = _init_content_size();
 		}
 
-		class Rom_vfs_handle : public Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			private:
+			using Rom = Attached_rom_dataspace;
 
-				Attached_rom_dataspace &_rom;
+			Allocator &_alloc;
+			Rom       &_rom;
 
-				size_t const &_content_size;
+			size_t const &_content_size;
 
-			public:
+			File_channel(Allocator &alloc, Rom &rom, size_t const &content_size)
+			:
+				Vfs::File_channel({ .writeable = false }),
+				_alloc(alloc), _rom(rom), _content_size(content_size)
+			{ }
 
-				Rom_vfs_handle(Directory_service      &ds,
-				               Allocator              &alloc,
-				               Attached_rom_dataspace &rom,
-				               size_t           const &content_size)
-				:
-					Single_vfs_handle(ds, alloc, 0),
-					_rom(rom), _content_size(content_size)
-				{ }
+			Read_result read(At const at, Byte_range_ptr const &dst) override
+			{
+				/* file read limit is the size of the dataspace */
+				size_t const max_size = _content_size;
 
-				Read_result read(At const at, Byte_range_ptr const &dst) override
-				{
-					/* file read limit is the size of the dataspace */
-					size_t const max_size = _content_size;
+				/* current read offset */
+				size_t const read_pos = size_t(at.pos);
 
-					/* current read offset */
-					size_t const read_pos = size_t(at.pos);
+				/* maximum read position, clamped to dataspace size */
+				size_t const end_pos = min(dst.num_bytes + read_pos, max_size);
 
-					/* maximum read position, clamped to dataspace size */
-					size_t const end_pos = min(dst.num_bytes + read_pos, max_size);
+				/* check if end of file is reached */
+				if (read_pos >= end_pos)
+					return Read_eof();
 
-					/* check if end of file is reached */
-					if (read_pos >= end_pos)
-						return Read_eof();
+				/* source address within the dataspace */
+				char const *src = _rom.local_addr<char>() + read_pos;
 
-					/* source address within the dataspace */
-					char const *src = _rom.local_addr<char>() + read_pos;
+				/* copy-out bytes from ROM dataspace */
+				size_t const num_bytes = end_pos - read_pos;
 
-					/* copy-out bytes from ROM dataspace */
-					size_t const num_bytes = end_pos - read_pos;
+				memcpy(dst.start, src, num_bytes);
 
-					memcpy(dst.start, src, num_bytes);
+				return num_bytes;
+			}
 
-					return num_bytes;
-				}
+			bool read_ready()  const override { return true; }
+			bool write_ready() const override { return false; }
 
-				bool read_ready()  const override { return true; }
-				bool write_ready() const override { return false; }
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		void _handle_rom_changed() { Single_file_system::_notify_watchers(); }
@@ -139,22 +137,16 @@ class Vfs_rom::File_system : public Single_file_system
 		 ** Directory-service interface **
 		 ********************************/
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+			if (attr.writeable || !_single_file(path))
+				return Open_error::DENIED;
 
 			_update();
 
-			try {
-				*out_handle = new (alloc)
-					Rom_vfs_handle(*this, alloc, _rom, _content_size);
-				return OPEN_OK;
-			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, _rom, _content_size); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Dataspace_capability dataspace(char const *path) override

@@ -19,7 +19,6 @@
 #include <base/allocator.h>
 #include <base/id_space.h>
 #include <util/bit_allocator.h>
-#include <vfs/vfs_handle.h>
 
 /* libc-internal includes */
 #include <internal/kqueue.h>

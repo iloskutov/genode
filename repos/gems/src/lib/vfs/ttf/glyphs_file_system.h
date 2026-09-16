@@ -55,15 +55,15 @@ class Vfs_glyphs::File_system : public Single_file_system
 
 		Accessor &_accessor;
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator  &_alloc;
 			Font const &_font;
 
-			Vfs_handle(Directory_service &ds,
-			           Allocator         &alloc,
-			           Font        const &font)
+			File_channel(Allocator &alloc, Font const &font)
 			:
-				Single_vfs_handle(ds, alloc, 0), _font(font)
+				Vfs::File_channel({ .writeable = false }),
+				_alloc(alloc), _font(font)
 			{ }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -116,6 +116,8 @@ class Vfs_glyphs::File_system : public Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return false; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -132,25 +134,25 @@ class Vfs_glyphs::File_system : public Single_file_system
 
 		void notify_watchers() { Single_file_system::_notify_watchers(); }
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
+
+			Vfs::File_channel *channel_ptr = nullptr;
+			Open_error error = Open_error::DENIED;
 
 			try {
-				bool font_exists = false;
 				_accessor.with_font([&] (Font const &font) {
-					font_exists = true;
-					*out_handle = new (alloc) Vfs_handle(*this, alloc, font);
-				});
-				if (!font_exists)
-					error("Vfs_glyphs: font not available");
-				return OPEN_OK;
+					channel_ptr = new (alloc) File_channel(alloc, font); });
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { error = Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { error = Open_error::OUT_OF_CAPS; }
+
+			if (channel_ptr)
+				return *channel_ptr;
+
+			return error;
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

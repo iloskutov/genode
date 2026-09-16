@@ -190,32 +190,27 @@ namespace Genode::Vfs {
 		return Follow_error::NO_SYMLINK;
 	}
 
+	/**
+	 * Interface to notify VFS user once a file channel becomes ready to read
+	 *
+	 * Note that 'read_ready_response' is called at I/O signal level.
+	 */
+	struct Read_ready_response_handler : Interface
+	{
+		virtual void read_ready_response() = 0;
+	};
+
 	enum class Read_ready_result  { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
 	enum class Write_ready_result { YES, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
-	struct Dir_channel : Interface, Noncopyable
-	{
-		enum class Read_error { RETRY, DENIED };
+	struct File_channel;
 
-		using Read_result = Attempt<size_t, Read_error>;
+	enum class Open_error { RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
-		struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
+	using Open_result = Unique_attempt<File_channel &, Open_error>;
 
-		/**
-		 * Initiate or complete read of directory entries
-		 *
-		 * On success, the method returns the number of read bytes.
-		 * If zero, the end of file is reached.
-		 *
-		 * \return Read_error::RETRY  if the read operation is not yet
-		 *                            complete and must by tried again once
-		 *                            external I/O has progressed
-		 */
-		virtual Read_result read(At, Byte_range_ptr const &dst) = 0;
-
-		virtual void destruct() = 0;
-	};
+	struct Dir_channel;
 
 	enum class Opendir_error { RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
@@ -236,5 +231,150 @@ namespace Genode::Vfs {
 	struct Env;
 	struct Root;
 }
+
+
+struct Genode::Vfs::File_channel : Noncopyable, Interface
+{
+	bool const writeable;
+
+	struct Attr { bool writeable; };
+
+	File_channel(Attr attr) : writeable(attr.writeable) { }
+
+	/**
+	 * Define read-ready response handler, called by VFS user
+	 */
+	virtual void handler(Read_ready_response_handler &handler)
+	{
+		_handler_ptr = &handler;
+	}
+
+	/**
+	 * Schedule read-ready notification, called by the VFS user
+	 */
+	virtual void notify_read_ready() { }
+
+	/**
+	 * Notify application that a read operation can be retried
+	 *
+	 * Called by the 'File_system' implementation.
+	 */
+	void read_ready_response()
+	{
+		if (_handler_ptr) _handler_ptr->read_ready_response();
+	}
+
+	/**
+	 * Return true whenever the channel has readable data
+	 */
+	virtual bool read_ready() const = 0;
+
+	/**
+	 * Return true whenever the channel accepts data to write
+	 */
+	virtual bool write_ready() const = 0;
+
+	/*
+	 * Result types excluding OUT_OF_RAM and OUT_OF_CAPS
+	 *
+	 * The allocation errors OUT_OF_RAM and OUT_OF_CAPS are only expected
+	 * at channel-creation time.
+	 */
+
+	enum class Write_error { RETRY, DENIED };
+
+	using Write_result = Attempt<size_t, Write_error>;
+
+	/**
+	 * Initiate or complete write operation
+	 *
+	 * On success, the method returns the number of consumed bytes.
+	 *
+	 * Note that the consumed content is not known to be physically stored
+	 * when the method returns. The data could be held in an intermediate
+	 * buffer such as the packet-stream buffer of a file-system session.
+	 * Use 'sync' to observe the completion of write operations.
+	 */
+	virtual Write_result write(At, Const_byte_range_ptr const &)
+	{
+		return Write_error::DENIED;
+	}
+
+	/**
+	 * Initiate or complete sync operation
+	 */
+	virtual Sync_result sync() { return Sync_result::OK; }
+
+	enum class Read_error { RETRY, DENIED };
+
+	using Read_result = Attempt<size_t, Read_error>;
+
+	struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
+
+	/**
+	 * Initiate or complete read operation
+	 *
+	 * On success, the method returns the number of read bytes.
+	 * If zero, the end of file is reached.
+	 *
+	 * \return Read_error::RETRY  if the read operation is not yet
+	 *                            complete and must by tried again once
+	 *                            external I/O has progressed
+	 */
+	virtual Read_result read(At, Byte_range_ptr const &dst) = 0;
+
+	enum class Resize_result { OK, RETRY, DENIED };
+
+	virtual Resize_result resize(file_size) { return Resize_result::DENIED; }
+
+	enum class Update_mtime_result { OK, RETRY };
+
+	/**
+	 * Update the modification time of a file
+	 *
+	 * Note that the return value does not reflect whether the modification
+	 * time is captured and held by the targeted file system. A file system
+	 * that discards the information still returns OK. Typical scenarios
+	 * where the modification time is updated as a side effect, like when a
+	 * modified file is closed, would not reflect this condition to the
+	 * application-level anyway. In other cases where the integrity of
+	 * modification times is assumed, a subsequent 'stat' shall be used
+	 * confirm the effect of the update.
+	 */
+	virtual Update_mtime_result update_mtime(Timestamp)
+	{
+		return Update_mtime_result::OK;
+	}
+
+	virtual void destruct() = 0;
+
+	private:
+
+		struct { Read_ready_response_handler *_handler_ptr = nullptr; };
+};
+
+
+struct Genode::Vfs::Dir_channel : Interface, Noncopyable
+{
+	enum class Read_error { RETRY, DENIED };
+
+	using Read_result = Attempt<size_t, Read_error>;
+
+	struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
+
+	/**
+	 * Initiate or complete read of directory entries
+	 *
+	 * On success, the method returns the number of read bytes.
+	 * If zero, the end of file is reached.
+	 *
+	 * \return Read_error::RETRY  if the read operation is not yet
+	 *                            complete and must by tried again once
+	 *                            external I/O has progressed
+	 */
+	virtual Read_result read(At, Byte_range_ptr const &dst) = 0;
+
+	virtual void destruct() = 0;
+};
 
 #endif /* _INCLUDE__VFS__TYPES_H_ */

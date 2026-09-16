@@ -24,7 +24,6 @@
 #include <net/ipv4.h>
 #include <util/string.h>
 #include <vfs/directory_service.h>
-#include <vfs/vfs_handle.h>
 #include <timer_session/connection.h>
 
 #include "vfs_ip.h"
@@ -65,18 +64,17 @@ namespace Vfs_ip {
 
 	class Ip_sockopt_dir;
 	class Ip_socket_dir;
-	struct Ip_socket_handle;
+	struct Ip_socket_file_channel;
 
 	struct Ip_address_info;
 	class  Ip_link_state_file;
 	class  Ip_address_file;
 
-	struct Ip_vfs_handle;
-	class Ip_vfs_file_handle;
+	class Ip_file_channel;
 	class Ip_dir_channel;
 	class Ip_file_system;
 
-	using Ip_vfs_file_handles = List<List_element<Ip_vfs_file_handle> >;
+	using Ip_file_channels = List<List_element<Ip_file_channel> >;
 }
 
 
@@ -178,7 +176,7 @@ struct Vfs_ip::Node
 
 struct Vfs_ip::File : Vfs_ip::Node
 {
-	Ip_vfs_file_handles handles { };
+	Ip_file_channels channels { };
 
 	File(char const *name) : Node(name) { }
 
@@ -195,15 +193,13 @@ struct Vfs_ip::File : Vfs_ip::Node
 	virtual bool read_ready()  const { return true; }
 	virtual bool write_ready() const { return true; };
 
-	virtual long write(Ip_vfs_file_handle &,
-	                   Const_byte_range_ptr const &, file_size)
+	virtual long write(Ip_file_channel &, Const_byte_range_ptr const &, file_size)
 	{
 		error(name(), " not writeable");
 		return -1;
 	}
 
-	virtual long read(Ip_vfs_file_handle &,
-	                  Byte_range_ptr const &, file_size)
+	virtual long read(Ip_file_channel &, Byte_range_ptr const &, file_size)
 	{
 		error(name(), " not readable");
 		return -1;
@@ -222,10 +218,9 @@ struct Vfs_ip::Directory : Vfs_ip::Node
 	virtual Vfs_ip::Node *child(char const *) = 0;
 	virtual unsigned num_dirent()             = 0;
 
-	using Open_result = Directory_service::Open_result;
-	virtual Open_result open(File_system &fs,
-	                         Allocator &alloc,
-	                         char const*, unsigned, Vfs_handle**) = 0;
+	using Open_attr = Directory_service::Open_attr;
+
+	virtual Open_result open(File_system &fs, char const *, Open_attr, Allocator &) = 0;
 
 	virtual long read(Byte_range_ptr const &, file_size seek_offset) = 0;
 };
@@ -246,8 +241,6 @@ struct Vfs_ip::Protocol_dir : Vfs_ip::Directory
 
 struct Vfs_ip::Socket_dir : Vfs_ip::Directory
 {
-	using Open_result = Directory_service::Open_result;
-
 	virtual Protocol_dir &parent() = 0;
 	virtual char const *top_dir() = 0;
 	virtual void     connect(bool) = 0;
@@ -261,40 +254,42 @@ struct Vfs_ip::Socket_dir : Vfs_ip::Directory
 };
 
 
-static Genode::Fifo<Genode::Fifo_element<Vfs_ip::Ip_vfs_file_handle>> *_read_ready_waiters_ptr;
+static Genode::Fifo<Genode::Fifo_element<Vfs_ip::Ip_file_channel>> *_read_ready_waiters_ptr;
 
 
-struct Vfs_ip::Ip_vfs_file_handle final : Vfs_handle
+struct Vfs_ip::Ip_file_channel : Vfs::File_channel
 {
-	Ip_vfs_file_handle(Ip_vfs_file_handle const &);
-	Ip_vfs_file_handle &operator = (Ip_vfs_file_handle const &);
+	Ip_file_channel(Ip_file_channel const &);
+	Ip_file_channel &operator = (Ip_file_channel const &);
+
+	Allocator &_alloc;
 
 	Vfs_ip::File *file;
 
 	/* file association element */
-	List_element<Ip_vfs_file_handle> file_le { this };
+	List_element<Ip_file_channel> file_le { this };
 
 	/* notification elements */
-	using Fifo_element = Genode::Fifo_element<Ip_vfs_file_handle>;
+	using Fifo_element = Genode::Fifo_element<Ip_file_channel>;
 	using Fifo         = Genode::Fifo<Fifo_element>;
 
 	Fifo_element read_ready_elem { *this };
 
 	char content_buffer[MAX_DATA_LEN];
 
-	Ip_vfs_file_handle(File_system &fs, Allocator &alloc, int status_flags,
-	                   Vfs_ip::File *file)
+	Ip_file_channel(Allocator &alloc, Attr attr, Vfs_ip::File *file)
 	:
-		Vfs_handle(fs, alloc, status_flags), file(file)
+		Vfs::File_channel(attr),
+		_alloc(alloc), file(file)
 	{
 		if (file)
-			file->handles.insert(&file_le);
+			file->channels.insert(&file_le);
 	}
 
-	~Ip_vfs_file_handle()
+	~Ip_file_channel()
 	{
 		if (file)
-			file->handles.remove(&file_le);
+			file->channels.remove(&file_le);
 	}
 
 	bool read_ready() const override {
@@ -356,6 +351,12 @@ struct Vfs_ip::Ip_vfs_file_handle final : Vfs_handle
 		/* report ok because libc always executes ftruncate() when opening rw */
 		return Resize_result::OK;
 	}
+
+	void destruct() override
+	{
+		_read_ready_waiters_ptr->remove(read_ready_elem);
+		destroy(_alloc, this);
+	}
 };
 
 
@@ -384,14 +385,14 @@ struct Vfs_ip::Ip_dir_channel : Vfs::Dir_channel
 static void poll_all()
 {
 	_read_ready_waiters_ptr->for_each(
-			[&] (Vfs_ip::Ip_vfs_file_handle::Fifo_element &elem) {
-		Vfs_ip::Ip_vfs_file_handle &handle = elem.object();
-		if (handle.file) {
-			if (handle.file->read_ready()) {
+			[&] (Vfs_ip::Ip_file_channel::Fifo_element &elem) {
+		Vfs_ip::Ip_file_channel &c = elem.object();
+		if (c.file) {
+			if (c.file->read_ready()) {
 				/* do not notify again until notify_read_ready */
 				_read_ready_waiters_ptr->remove(elem);
 
-				handle.read_ready_response();
+				c.read_ready_response();
 			}
 		}
 	});
@@ -420,16 +421,16 @@ class Vfs_ip::Ip_file : public Vfs_ip::File
 		virtual ~Ip_file() { }
 
 		/**
-		 * Dissolve relationship between handle and file, file and polling list.
+		 * Dissolve relationship between channel and file, file and polling list.
 		 */
-		void dissolve_handles()
+		void dissolve_channels()
 		{
-			List_element<Vfs_ip::Ip_vfs_file_handle> *le = handles.first();
+			List_element<Vfs_ip::Ip_file_channel> *le = channels.first();
 			while (le) {
-				Vfs_ip::Ip_vfs_file_handle *h = le->object();
-				handles.remove(&h->file_le);
-				h->file = nullptr;
-				le = handles.first();
+				Vfs_ip::Ip_file_channel &c = *le->object();
+				channels.remove(&c.file_le);
+				c.file = nullptr;
+				le = channels.first();
 			}
 		}
 
@@ -462,9 +463,7 @@ class Vfs_ip::Ip_data_file final : public Vfs_ip::Ip_file
 			return genode_socket_poll(&_sock) & genode_socket_pollout_set();
 		}
 
-		long write(Ip_vfs_file_handle &,
-		           Const_byte_range_ptr const &src,
-		           file_size /* ignored */) override
+		long write(Ip_file_channel &, Const_byte_range_ptr const &src, file_size) override
 		{
 			unsigned long bytes_sent = 0;
 			Msg_header    msg_send { src.start, src.num_bytes };
@@ -483,9 +482,7 @@ class Vfs_ip::Ip_data_file final : public Vfs_ip::Ip_file
 			return _write_err == GENODE_ENONE ? bytes_sent : -1;
 		}
 
-		long read(Ip_vfs_file_handle &,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			unsigned long bytes = 0;
 			Msg_header    msg_recv { dst.start, dst.num_bytes };
@@ -515,15 +512,12 @@ class Vfs_ip::Ip_peek_file final : public Vfs_ip::Ip_file
 		bool read_ready()  const override { return true;  }
 		bool write_ready() const override { return false; }
 
-		long write(Ip_vfs_file_handle &,
-		     Const_byte_range_ptr const &, file_size) override
+		long write(Ip_file_channel &, Const_byte_range_ptr const &, file_size) override
 		{
 			return -1;
 		}
 
-		long read(Ip_vfs_file_handle &,
-		                   Byte_range_ptr const &dst,
-		                   file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			unsigned long bytes_avail = 0;
 			Msg_header    msg_recv { dst.start, dst.num_bytes };
@@ -550,20 +544,18 @@ class Vfs_ip::Ip_bind_file final : public Vfs_ip::Ip_file
 		 ** File interface **
 		 ********************/
 
-		long write(Ip_vfs_file_handle &handle,
-		           Const_byte_range_ptr const &src,
-		           file_size /* ignored */) override
+		long write(Ip_file_channel &c, Const_byte_range_ptr const &src, file_size) override
 		{
-			if (!handle.write_content_line(src)) return -1;
+			if (!c.write_content_line(src)) return -1;
 
-			long port = get_port(handle.content_buffer);
+			long port = get_port(c.content_buffer);
 			if (port == -1) return -1;
 
 			/* port is free, try to bind it */
 			genode_sockaddr addr;
 			addr.family  = AF_INET;
 			addr.in.port = host_to_big_endian<genode_uint16_t>(uint16_t(port));
-			addr.in.addr = get_addr(handle.content_buffer);
+			addr.in.addr = get_addr(c.content_buffer);
 
 			_write_err = socket_error(genode_socket_bind(&_sock, &addr));
 			if (_write_err != GENODE_ENONE) return -1;
@@ -571,15 +563,13 @@ class Vfs_ip::Ip_bind_file final : public Vfs_ip::Ip_file
 			return src.num_bytes;
 		}
 
-		long read(Ip_vfs_file_handle &handle,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &c, Byte_range_ptr const &dst, file_size) override
 		{
-			if (dst.num_bytes < sizeof(handle.content_buffer))
+			if (dst.num_bytes < sizeof(c.content_buffer))
 				return -1;
 
-			size_t const n = strlen(handle.content_buffer);
-			memcpy(dst.start, handle.content_buffer, n);
+			size_t const n = strlen(c.content_buffer);
+			memcpy(dst.start, c.content_buffer, n);
 
 			return n;
 		}
@@ -601,23 +591,21 @@ class Vfs_ip::Ip_listen_file final : public Vfs_ip::Ip_file
 		 ** File interface **
 		 ********************/
 
-		long write(Ip_vfs_file_handle &handle,
-		           Const_byte_range_ptr const &src,
-		           file_size /* ignored */) override
+		long write(Ip_file_channel &c, Const_byte_range_ptr const &src, file_size) override
 		{
 			/* write-once */
 			if (_backlog != ~0UL) return -1;
 
-			if (!handle.write_content_line(src)) return -1;
+			if (!c.write_content_line(src)) return -1;
 
 			ascii_to_unsigned(
-				handle.content_buffer, _backlog, sizeof(handle.content_buffer));
+				c.content_buffer, _backlog, sizeof(c.content_buffer));
 
 			if (_backlog == ~0UL) return -1;
 
 			_write_err = socket_error(genode_socket_listen(&_sock, (int)_backlog));
 			if (_write_err != GENODE_ENONE) {
-				handle.write_content_line(Const_byte_range_ptr("", 0));
+				c.write_content_line(Const_byte_range_ptr("", 0));
 				return -1;
 			}
 
@@ -626,9 +614,7 @@ class Vfs_ip::Ip_listen_file final : public Vfs_ip::Ip_file
 			return src.num_bytes;
 		}
 
-		long read(Ip_vfs_file_handle &,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			return Format::snprintf(dst.start, dst.num_bytes, "%lu\n", _backlog);
 		}
@@ -662,20 +648,18 @@ class Vfs_ip::Ip_connect_file final : public Vfs_ip::Ip_file
 
 		bool write_ready() const override { return true; };
 
-		long write(Ip_vfs_file_handle &handle,
-		           Const_byte_range_ptr const &src,
-		           file_size /* ignored */) override
+		long write(Ip_file_channel &c, Const_byte_range_ptr const &src, file_size) override
 		{
-			if (!handle.write_content_line(src)) return -1;
+			if (!c.write_content_line(src)) return -1;
 
-			long const port = get_port(handle.content_buffer);
-			long const family = get_family(handle.content_buffer);
+			long const port = get_port(c.content_buffer);
+			long const family = get_family(c.content_buffer);
 			if (port == -1) return -1;
 
 			genode_sockaddr addr;
 			addr.family  = family == 0 ? AF_UNSPEC : AF_INET;
 			addr.in.port = host_to_big_endian<genode_uint16_t>(uint16_t(port));
-			addr.in.addr = get_addr(handle.content_buffer);
+			addr.in.addr = get_addr(c.content_buffer);
 
 			_write_err = socket_error(genode_socket_connect(&_sock, &addr));
 
@@ -707,7 +691,7 @@ class Vfs_ip::Ip_connect_file final : public Vfs_ip::Ip_file
 
 			genode_sockaddr &remote_addr = _parent.remote_addr();
 			remote_addr.in.port          = host_to_big_endian<genode_uint16_t>(uint16_t(port));
-			remote_addr.in.addr          = get_addr(handle.content_buffer);
+			remote_addr.in.addr          = get_addr(c.content_buffer);
 			remote_addr.family           = AF_INET;
 
 			_parent.connect(true);
@@ -715,9 +699,7 @@ class Vfs_ip::Ip_connect_file final : public Vfs_ip::Ip_file
 			return src.num_bytes;
 		}
 
-		long read(Ip_vfs_file_handle &,
-		                   Byte_range_ptr const &dst,
-		                   file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size /* ignored */) override
 		{
 			Errno err;
 			unsigned long size = 1;
@@ -757,11 +739,9 @@ class Vfs_ip::Ip_local_file final : public Vfs_ip::Ip_file
 		 ** File interface **
 		 ********************/
 
-		long read(Ip_vfs_file_handle &handle,
-		                   Byte_range_ptr const &dst,
-		                   file_size /* ignored */) override
+		long read(Ip_file_channel &c, Byte_range_ptr const &dst, file_size) override
 		{
-			if (dst.num_bytes < sizeof(handle.content_buffer))
+			if (dst.num_bytes < sizeof(c.content_buffer))
 				return -1;
 
 			genode_sockaddr addr;
@@ -802,9 +782,7 @@ class Vfs_ip::Ip_remote_file final : public Vfs_ip::Ip_file
 
 		bool write_ready() const override { return false; }
 
-		long read(Ip_vfs_file_handle &handle,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &c, Byte_range_ptr const &dst, file_size) override
 		{
 			genode_sockaddr addr { .family = AF_INET };
 
@@ -813,7 +791,7 @@ class Vfs_ip::Ip_remote_file final : public Vfs_ip::Ip_file
 				{
 					/* peek the sender address of the next packet */
 					unsigned long bytes = 0;
-					Msg_header msg_recv = { addr, handle.content_buffer, sizeof(handle.content_buffer) };
+					Msg_header msg_recv = { addr, c.content_buffer, sizeof(c.content_buffer) };
 
 					Errno err = genode_socket_recvmsg(&_sock, msg_recv.header(), &bytes, true);
 					if (err == GENODE_EAGAIN)
@@ -837,18 +815,16 @@ class Vfs_ip::Ip_remote_file final : public Vfs_ip::Ip_file
 			                        a[0], a[1], a[2], a[3], (p[0]<<8)|(p[1]<<0));
 		}
 
-		long write(Ip_vfs_file_handle &handle,
-		           Const_byte_range_ptr const &src,
-		           file_size /* ignored */) override
+		long write(Ip_file_channel &c, Const_byte_range_ptr const &src, file_size) override
 		{
-			if (!handle.write_content_line(src)) return -1;
+			if (!c.write_content_line(src)) return -1;
 
-			long const port = get_port(handle.content_buffer);
+			long const port = get_port(c.content_buffer);
 			if (port == -1) return -1;
 
 			genode_sockaddr &remote_addr = _parent.remote_addr();
 			remote_addr.in.port          = host_to_big_endian<genode_uint16_t>(uint16_t(port));
-			remote_addr.in.addr          = get_addr(handle.content_buffer);
+			remote_addr.in.addr          = get_addr(c.content_buffer);
 			remote_addr.family           = AF_INET;
 
 			return src.num_bytes;
@@ -874,9 +850,7 @@ class Vfs_ip::Ip_accept_file final : public Vfs_ip::Ip_file
 
 		bool write_ready() const override { return false; }
 
-		long read(Ip_vfs_file_handle &,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			if (genode_socket_poll(&_sock) & genode_socket_pollin_set()) {
 				copy_cstring(dst.start, "1\n", dst.num_bytes);
@@ -892,8 +866,6 @@ class Vfs_ip::Ip_error_file : public Vfs_ip::File
 {
 	private:
 
-		using Open_result = Vfs::Directory_service::Open_result;
-
 		Error_file_system _error_fs;
 
 	public:
@@ -903,9 +875,10 @@ class Vfs_ip::Ip_error_file : public Vfs_ip::File
 			File(name), _error_fs(parent_fs)
 		{ }
 
-		Open_result open(char const *path, Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) {
-			return _error_fs.open(path, 0, out_handle, alloc); }
+		using Open_attr = Directory_service::Open_attr;
+
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) {
+			return _error_fs.open(path, attr, alloc); }
 
 		Errno socket_error(Errno const err) { return _error_fs.socket_error(err); }
 };
@@ -939,12 +912,9 @@ class Vfs_ip::Ip_sockopt_dir : public Vfs_ip::Directory
 			return nullptr;
 		}
 
-		Open_result open(File_system &,
-		                 Allocator &alloc,
-		                 char const*path, unsigned mode,
-		                 Vfs_handle **out_handle) override
+		Open_result open(File_system &, char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			return _sockopt_fs.open(path, mode, out_handle, alloc);
+			return _sockopt_fs.open(path, attr, alloc);
 		}
 
 		long read(Byte_range_ptr const &, file_size) override
@@ -1013,8 +983,7 @@ class Vfs_ip::Ip_socket_dir final : public Socket_dir
 
 		char _name[MAX_SOCKET_NAME_LEN];
 
-		Directory_service::Open_result
-		_accept_new_socket(File_system &fs, Allocator &alloc, Vfs_handle **);
+		Open_result _accept_new_socket(Allocator &);
 
 	public:
 
@@ -1046,15 +1015,14 @@ class Vfs_ip::Ip_socket_dir final : public Socket_dir
 
 		~Ip_socket_dir()
 		{
-			_accept_file.dissolve_handles();
-			_bind_file.dissolve_handles();
-			_connect_file.dissolve_handles();
-			_data_file.dissolve_handles();
-			_peek_file.dissolve_handles();
-			_listen_file.dissolve_handles();
-			_local_file.dissolve_handles();
-			_remote_file.dissolve_handles();
-
+			_accept_file .dissolve_channels();
+			_bind_file   .dissolve_channels();
+			_connect_file.dissolve_channels();
+			_data_file   .dissolve_channels();
+			_peek_file   .dissolve_channels();
+			_listen_file .dissolve_channels();
+			_local_file  .dissolve_channels();
+			_remote_file .dissolve_channels();
 
 			genode_socket_release(&_sock);
 			_parent.release(id);
@@ -1071,40 +1039,28 @@ class Vfs_ip::Ip_socket_dir final : public Socket_dir
 		char const *top_dir() override { return _parent.top_dir(); }
 
 		Open_result
-		open(File_system &fs,
-		     Allocator &alloc,
-		     char const *path, unsigned mode,
-		     Vfs_handle **out_handle) override
+		open(File_system &fs, char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			++path;
 
 			if (strcmp(path, "accept_socket") == 0)
-				return _accept_new_socket(fs, alloc, out_handle);
+				return _accept_new_socket(alloc);
 
 			for (Vfs_ip::File *f : _files) {
 				if (f && strcmp(f->name(), path) == 0) {
-					Vfs_ip::Ip_vfs_file_handle *handle = new (alloc)
-						Vfs_ip::Ip_vfs_file_handle(fs, alloc, mode, f);
-					*out_handle = handle;
-					return Open_result::OPEN_OK;
+					return *new (alloc)
+						Vfs_ip::Ip_file_channel(alloc, { .writeable = attr.writeable }, f);
 				}
 			}
 
 			/* error file */
 			if (strcmp(path, _error_fs.name()) == 0) {
 				/* add leading slash back to path */
-				Open_result res = _error_fs.open(path - 1, out_handle, alloc);
-				if (res == Open_result::OPEN_OK) return res;
+				return _error_fs.open(path - 1, { }, alloc);
 			}
 
-			/* try sockopt directory */
-			Open_result res = _sockopt_fs.open(fs, alloc, path, mode, out_handle);
-			if (res == Open_result::OPEN_OK) return res;
-
-			error(path, " is UNACCESSIBLE");
-			return Directory_service::OPEN_ERR_UNACCESSIBLE;
+			return _sockopt_fs.open(fs, path, attr, alloc);
 		}
-
 
 		void connect(bool) override { }
 
@@ -1183,19 +1139,20 @@ class Vfs_ip::Ip_socket_dir final : public Socket_dir
 };
 
 
-struct Vfs_ip::Ip_socket_handle final : Vfs_handle
+struct Vfs_ip::Ip_socket_file_channel : Vfs::File_channel
 {
+	Allocator &_alloc;
+
 	Ip_socket_dir _dir;
 
-	Ip_socket_handle(Vfs::Env &env,
-	                 Parent_fs &parent_fs,
-	                 File_system &fs,
-	                 Allocator &alloc,
-	                 Protocol_dir &parent,
-	                 genode_socket_handle &sock)
+	Ip_socket_file_channel(Allocator &alloc,
+	                       Vfs::Env &env,
+	                       Parent_fs &parent_fs,
+	                       Protocol_dir &parent,
+	                       genode_socket_handle &sock)
 	:
-		Vfs_handle(fs, alloc, 0),
-		_dir(env, parent_fs, alloc, parent, sock)
+		Vfs::File_channel({ }),
+		_alloc(alloc), _dir(env, parent_fs, alloc, parent, sock)
 	{ }
 
 	bool read_ready() const override { return true; }
@@ -1207,37 +1164,34 @@ struct Vfs_ip::Ip_socket_handle final : Vfs_handle
 	}
 
 	bool write_ready() const override { return false; }
+
+	void destruct() override { destroy(_alloc, this); }
 };
 
 
-Genode::Vfs::Directory_service::Open_result
-Vfs_ip::Ip_socket_dir::_accept_new_socket(File_system &fs,
-                                          Allocator &alloc,
-                                          Vfs_handle **out_handle)
+Genode::Vfs::Open_result
+Vfs_ip::Ip_socket_dir::_accept_new_socket(Allocator &alloc)
 {
-	Open_result res = Open_result::OPEN_ERR_UNACCESSIBLE;
-	if (!_files[ACCEPT_SOCKET_NODE]) return res;
+	if (!_files[ACCEPT_SOCKET_NODE]) return Open_error::DENIED;
 
 	Errno err;
 	genode_socket_handle *new_sock = genode_socket_accept(&_sock, nullptr, &err);
 	if (err != GENODE_ENONE) {
 		error("accept socket failed");
-		return res;
+		return Open_error::DENIED;
 	}
 
+	Open_error error = Open_error::DENIED;
 	try {
-		Vfs_ip::Ip_socket_handle *handle = new (alloc)
-			Vfs_ip::Ip_socket_handle(_env, _parent_fs, fs, alloc, _parent, *new_sock);
-		*out_handle = handle;
-		return Directory_service::Open_result::OPEN_OK;
+		return *new (alloc)
+			Vfs_ip::Ip_socket_file_channel(alloc, _env, _parent_fs, _parent, *new_sock);
 	}
-
-	catch (Out_of_ram)  { res = Open_result::OPEN_ERR_OUT_OF_RAM;  }
-	catch (Out_of_caps) { res = Open_result::OPEN_ERR_OUT_OF_CAPS; }
-	catch (...) { error("unhandle error during accept"); }
+	catch (Out_of_ram)  { error = Open_error::OUT_OF_RAM;  }
+	catch (Out_of_caps) { error = Open_error::OUT_OF_CAPS; }
+	catch (...) { Genode::error("unhandled error during accept"); }
 
 	genode_socket_release(new_sock);
-	return res;
+	return error;
 };
 
 
@@ -1293,20 +1247,14 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 			return (strcmp(path, "") == 0) || (strcmp(path, "/") == 0);
 		}
 
-		Directory_service::Open_result
-		_open_new_socket(File_system &fs,
-		                 Allocator &alloc,
-		                 Vfs_handle **out_handle)
+		Open_result _open_new_socket(Allocator &alloc)
 		{
-			Directory_service::Open_result res =
-				Directory_service::Open_result::OPEN_ERR_UNACCESSIBLE;
-
 			int type = (_type == Protocol_dir::TYPE_STREAM)
 			         ? SOCK_STREAM : SOCK_DGRAM;
 
 			Errno err;
 			genode_socket_handle *sock = genode_socket(AF_INET, type, 0, &err);
-			if (sock == nullptr) return res;
+			if (sock == nullptr) return Open_error::DENIED;
 
 			/* XXX always allow UDP broadcast */
 			if (type == SOCK_DGRAM) {
@@ -1315,21 +1263,17 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 				                         &enable, sizeof(enable));
 			}
 
+			Open_error error = Open_error::DENIED;
 			try {
-				Vfs_ip::Ip_socket_handle *handle = new (alloc)
-					Vfs_ip::Ip_socket_handle(_env, _parent_fs, fs, alloc, *this, *sock);
-				*out_handle = handle;
-				return Directory_service::Open_result::OPEN_OK;
+				return *new (alloc)
+					Vfs_ip::Ip_socket_file_channel(alloc, _env, _parent_fs, *this, *sock);
 			}
-
-			catch (Out_of_ram)  {
-				res = Open_result::OPEN_ERR_OUT_OF_RAM;  }
-			catch (Out_of_caps) {
-				res = Open_result::OPEN_ERR_OUT_OF_CAPS; }
-			catch (...) { error("unhandle error during accept"); }
+			catch (Out_of_ram)  { error = Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { error = Open_error::OUT_OF_CAPS; }
+			catch (...) { Genode::error("unhandled error during _open_new_socket"); }
 
 			genode_socket_release(sock);
-			return res;
+			return error;
 		}
 
 	public:
@@ -1403,14 +1347,11 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 
 		Type type() override { return _type; }
 
-		Open_result open(File_system &fs,
-		                 Allocator &alloc,
-		                 char const *path, unsigned mode,
-		                 Vfs_handle **out_handle) override
+		Open_result open(File_system &fs, char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (strcmp(path, "/new_socket") == 0) {
-				if (mode != 0) return Open_result::OPEN_ERR_NO_PERM;
-				return _open_new_socket(fs, alloc, out_handle);
+				if (attr.writeable) return Open_error::DENIED;
+				return _open_new_socket(alloc);
 			}
 
 			path++;
@@ -1423,12 +1364,12 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 					Vfs_ip::Directory *dir = dynamic_cast<Directory *>(_nodes[i]);
 					if (dir) {
 						path += (p - path);
-						return dir->open(fs, alloc, path, mode, out_handle);
+						return dir->open(fs, path, attr, alloc);
 					}
 				}
 			}
 
-			return Open_result::OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 		}
 
 		unsigned adopt_socket(Socket_dir &dir) override
@@ -1526,9 +1467,7 @@ class Vfs_ip::Ip_address_file final : public Vfs_ip::File
 		: Vfs_ip::File(name),
 		  _numeric_address(numeric_address), _info(info) { }
 
-		long read(Ip_vfs_file_handle &,
-		                   Byte_range_ptr const &dst,
-		                   file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			_info.update();
 
@@ -1565,9 +1504,7 @@ class Vfs_ip::Ip_link_state_file final : public Vfs_ip::File
 		: Vfs_ip::File(name),
 		  _numeric_link_state(numeric_link_state), _info(info) { }
 
-		long read(Ip_vfs_file_handle &,
-		          Byte_range_ptr const &dst,
-		          file_size /* ignored */) override
+		long read(Ip_file_channel &, Byte_range_ptr const &dst, file_size) override
 		{
 			_info.update();
 
@@ -1753,10 +1690,11 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 
 		unsigned num_dirent() override { return 7; }
 
-		Directory::Open_result
-		open(File_system &, Allocator &, char const*, unsigned, Vfs_handle**) override
+		using Open_attr = Directory_service::Open_attr;
+
+		Open_result open(File_system &, char const *, Open_attr, Allocator &) override
 		{
-			return Directory::Open_result::OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 		}
 
 		long read(Byte_range_ptr const &dst, file_size seek_offset) override
@@ -1868,33 +1806,25 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 			return node != nullptr;
 		}
 
-		Directory_service::Open_result
-		open(char const *path, unsigned mode, Vfs_handle **out_handle,
-		     Allocator &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			try {
 				if (strcmp(path, "/tcp", 4) == 0)
-					return _tcp_dir.open(*this, alloc,
-					                     &path[4], mode, out_handle);
+					return _tcp_dir.open(*this, &path[4], attr, alloc);
 				if (strcmp(path, "/udp", 4) == 0)
-					return _udp_dir.open(*this, alloc,
-					                     &path[4], mode, out_handle);
+					return _udp_dir.open(*this, &path[4], attr, alloc);
 
 				Vfs_ip::Node *node = _lookup(path);
-				if (!node) return OPEN_ERR_UNACCESSIBLE;
+				if (!node) return Open_error::DENIED;
 
 				Vfs_ip::File *file = dynamic_cast<Vfs_ip::File*>(node);
-				if (file) {
-					Ip_vfs_file_handle *handle =
-						new (alloc) Vfs_ip::Ip_vfs_file_handle(*this, alloc, 0, file);
-					*out_handle = handle;
-					return OPEN_OK;
-				}
+				if (file)
+					return *new (alloc)
+						Vfs_ip::Ip_file_channel(alloc, { .writeable = attr.writeable }, file);
+				return Open_error::DENIED;
 			}
-			catch (Out_of_ram ) { return OPEN_ERR_OUT_OF_RAM;  }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
-
-			return OPEN_ERR_UNACCESSIBLE;
+			catch (Out_of_ram ) { return Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -1908,17 +1838,6 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 				return *new (alloc) Vfs_ip::Ip_dir_channel(alloc, *dir);
 
 			return Opendir_error::DENIED;
-		}
-
-		void close(Vfs_handle *vfs_handle) override
-		{
-			Ip_vfs_file_handle *file_handle =
-				dynamic_cast<Vfs_ip::Ip_vfs_file_handle*>(vfs_handle);
-
-			if (file_handle)
-				_read_ready_waiters_ptr->remove(file_handle->read_ready_elem);
-
-			destroy(vfs_handle->alloc(), vfs_handle);
 		}
 
 		Unlink_result unlink(char const *path) override
@@ -1939,7 +1858,7 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 
 extern "C" Genode::Vfs::File_system::Factory *vfs_file_system_factory(void)
 {
-	static Vfs_ip::Ip_vfs_file_handle::Fifo read_ready_waiters;
+	static Vfs_ip::Ip_file_channel::Fifo read_ready_waiters;
 
 	_read_ready_waiters_ptr = &read_ready_waiters;
 

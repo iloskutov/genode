@@ -16,7 +16,6 @@
 
 #include <base/registry.h>
 #include <vfs/union_file_system.h>
-#include <vfs/vfs_handle.h>
 
 namespace Genode::Vfs { class Dir_file_system; }
 
@@ -215,17 +214,14 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 				[&] () -> bool         { return false; });
 		}
 
-		Open_result open(char const *path, unsigned mode,
-		                 Vfs_handle **out, Allocator &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (_slash(path))
-				return OPEN_ERR_NO_PERM; /* cannot open dir as file */
+				return Open_error::DENIED; /* cannot open dir as file */
 
 			return _with_sub_path(path,
-				[&] (auto const &path) {
-					return _union.open(path, mode, out, alloc);
-				},
-				[&] () -> Open_result { return OPEN_ERR_UNACCESSIBLE; });
+				[&] (auto const &path) { return _union.open(path, attr, alloc); },
+				[&] () -> Open_result  { return Open_error::DENIED; });
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -241,12 +237,6 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 			return _with_sub_dir_path(path,
 				[&] (char const *path)   { return _union.opendir(path, alloc); },
 				[&] () -> Opendir_result { return Opendir_error::DENIED; });
-		}
-
-		void close(Vfs_handle *handle) override
-		{
-			if (handle && (&handle->ds() == this))
-				destroy(handle->alloc(), handle);
 		}
 
 		Watch_result watch(char const *path) override

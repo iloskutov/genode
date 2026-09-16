@@ -89,9 +89,6 @@ class Vfs_symlink::File_system : public Single_file_system
 			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 		}
 
-		Open_result open(char const *, unsigned, Vfs_handle **, Allocator&) override {
-			return OPEN_ERR_UNACCESSIBLE; }
-
 		Follow_result follow(char const *path, Byte_range_ptr const &dst) override
 		{
 			if (!_single_file(path))

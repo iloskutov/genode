@@ -48,20 +48,20 @@ class Vfs_tresor_crypto::Encrypt_file_system : public Vfs::Single_file_system
 		Tresor_crypto::Interface &_crypto;
 		uint32_t _key_id;
 
-		struct Encrypt_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator &_alloc;
 			Tresor_crypto::Interface &_crypto;
 			uint32_t _key_id;
 
 			enum State { NONE, PENDING };
-			State _state;
+			State _state = State::NONE;
 
-			Encrypt_handle(Directory_service &ds,
-			               Allocator &alloc, Tresor_crypto::Interface &crypto,
-			               uint32_t key_id)
+			File_channel(Allocator &alloc, Tresor_crypto::Interface &crypto,
+			             uint32_t key_id)
 			:
-				Single_vfs_handle(ds, alloc, 0),
-				_crypto(crypto), _key_id(key_id), _state(State::NONE)
+				Vfs::File_channel({ .writeable = true }),
+				_alloc(alloc), _crypto(crypto), _key_id(key_id)
 			{ }
 
 			Read_result read(At, Byte_range_ptr const &dst) override
@@ -109,6 +109,8 @@ class Vfs_tresor_crypto::Encrypt_file_system : public Vfs::Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -123,19 +125,16 @@ class Vfs_tresor_crypto::Encrypt_file_system : public Vfs::Single_file_system
 			_crypto(crypto), _key_id(key_id)
 		{ }
 
-		Open_result open(char const *path, unsigned, Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle =
-					new (alloc) Encrypt_handle(*this, alloc, _crypto, _key_id);
-				return OPEN_OK;
+				return *new (alloc) File_channel(alloc, _crypto, _key_id);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 
@@ -147,20 +146,21 @@ class Vfs_tresor_crypto::Decrypt_file_system : public Single_file_system
 		Tresor_crypto::Interface   &_crypto;
 		uint32_t  _key_id;
 
-		struct Decrypt_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			Tresor_crypto::Interface   &_crypto;
+			Allocator &_alloc;
+			Tresor_crypto::Interface &_crypto;
 			uint32_t  _key_id;
 
 			enum State { NONE, PENDING };
-			State _state;
+			State _state = State::NONE;
 
-			Decrypt_handle(Directory_service        &ds,
-			               Allocator                &alloc,
-			               Tresor_crypto::Interface &crypto,
-			               uint32_t                  key_id)
+			File_channel(Allocator                &alloc,
+			             Tresor_crypto::Interface &crypto,
+			             uint32_t                  key_id)
 			:
-				Single_vfs_handle(ds, alloc, 0), _crypto(crypto), _key_id(key_id), _state(State::NONE)
+				Vfs::File_channel({ .writeable = true }),
+				_alloc(alloc), _crypto(crypto), _key_id(key_id)
 			{ }
 
 			Read_result read(At, Byte_range_ptr const &dst) override
@@ -205,6 +205,8 @@ class Vfs_tresor_crypto::Decrypt_file_system : public Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -219,20 +221,16 @@ class Vfs_tresor_crypto::Decrypt_file_system : public Single_file_system
 			_crypto(crypto), _key_id(key_id)
 		{ }
 
-		Open_result open(char const *path, unsigned /* flags */,
-		                 Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle =
-					new (alloc) Decrypt_handle(*this, alloc, _crypto, _key_id);
-				return OPEN_OK;
+				return *new (alloc) File_channel(alloc, _crypto, _key_id);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 
@@ -528,24 +526,20 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 		 ** Directory service interface **
 		 *********************************/
 
-		Open_result open(char const  *path,
-		                 unsigned     mode,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			_key_reg.update(_vfs_env);
 
 			path = _sub_path(path);
-			if (!path || path[0] != '/') {
-				return OPEN_ERR_UNACCESSIBLE;
-			}
+			if (!path || path[0] != '/')
+				return Open_error::DENIED;
 
 			try {
 				Key_file_system &fs = _key_reg.by_path(path);
-				return fs.open(path, mode, out_handle, alloc);
+				return fs.open(path, attr, alloc);
 			} catch (Key_registry::Invalid_path) { }
 
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -558,12 +552,6 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 
 			warning("vfs_tresor_crypto: opendir for non-root dir not implemented");
 			return Opendir_error::DENIED;
-		}
-
-		void close(Vfs_handle *handle) override
-		{
-			if (handle && (&handle->ds() == this))
-				destroy(handle->alloc(), handle);
 		}
 
 		Stat_result stat(char const *path, Stat &out_stat) override
@@ -690,17 +678,18 @@ class Vfs_tresor_crypto::Management_file_system : public Single_file_system
 		Type    _type;
 		Tresor_crypto::Interface &_crypto;
 
-		struct Manage_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			Type    _type;
+			Allocator &_alloc;
+
+			Type _type;
+
 			Tresor_crypto::Interface &_crypto;
 
-			Manage_handle(Directory_service        &ds,
-			              Allocator                &alloc,
-			              Type                      type,
-			              Tresor_crypto::Interface &crypto)
+			File_channel(Allocator &alloc, Type type, Tresor_crypto::Interface &crypto)
 			:
-				Single_vfs_handle(ds, alloc, 0), _type(type), _crypto(crypto)
+				Vfs::File_channel({ .writeable = true }),
+				_alloc(alloc), _type(type), _crypto(crypto)
 			{ }
 
 			Read_result read(At, Byte_range_ptr const &) override
@@ -748,6 +737,8 @@ class Vfs_tresor_crypto::Management_file_system : public Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		char const *_type_name;
@@ -765,22 +756,14 @@ class Vfs_tresor_crypto::Management_file_system : public Single_file_system
 			_type(type), _crypto(crypto), _type_name(type_name)
 		{ }
 
-		Open_result open(char const  *path,
-		                 unsigned    /* flags */,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
-			if (!_single_file(path)) {
-				return OPEN_ERR_UNACCESSIBLE;
-			}
+			if (!_single_file(path))
+				return Open_error::DENIED;
 
-			try {
-				*out_handle =
-					new (alloc) Manage_handle(*this, alloc, _type, _crypto);
-				return OPEN_OK;
-			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, _type, _crypto); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

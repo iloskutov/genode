@@ -39,14 +39,15 @@ class Vfs_ip::Error_file_system : public Single_file_system
 		Errno _err             { GENODE_MAX_ERRNO };
 		char  _error[BUF_SIZE] { };
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator         &_alloc;
 			Error_file_system &_fs;
 
-			Vfs_handle(Error_file_system &fs, Allocator &alloc)
+			File_channel(Allocator &alloc, Error_file_system &fs)
 			:
-				Single_vfs_handle(fs, alloc, 0),
-				_fs(fs)
+				Vfs::File_channel({ .writeable = false }),
+				_alloc(alloc), _fs(fs)
 			{ }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -70,10 +71,7 @@ class Vfs_ip::Error_file_system : public Single_file_system
 				return Resize_result::OK;
 			}
 
-			private:
-
-				Vfs_handle(Vfs_handle const &);
-				Vfs_handle &operator = (Vfs_handle const &); 
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -108,19 +106,14 @@ class Vfs_ip::Error_file_system : public Single_file_system
 		 ** Directory-service interface **
 		 *********************************/
 
-		Open_result open(char const *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			try {
-				*out_handle = new (alloc) Vfs_handle(*this, alloc);
-				return OPEN_OK;
-			}
-			catch (Out_of_ram)  { error("out of ram"); return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { error("out of caps");return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, *this); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -129,8 +122,6 @@ class Vfs_ip::Error_file_system : public Single_file_system
 			out.size = BUF_SIZE;
 			return result;
 		}
-
-		using Single_file_system::close;
 
 	private:
 

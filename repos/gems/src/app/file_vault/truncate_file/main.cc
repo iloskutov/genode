@@ -32,20 +32,21 @@ struct Main
 
 	Main(Env &env) : env(env)
 	{
-		unsigned mode = Vfs::Directory_service::OPEN_MODE_WRONLY;
+		bool create = false;
 		Vfs::Directory_service::Stat stat { };
 		if (fs.stat(path.string(), stat) != Vfs::Directory_service::STAT_OK)
-			mode |= Vfs::Directory_service::OPEN_MODE_CREATE;
+			create = true;
 
-		Vfs::Vfs_handle *handle_ptr = nullptr;
-		auto res = fs.open(path.string(), mode, &handle_ptr, heap);
-		if (res != Vfs::Directory_service::OPEN_OK || (handle_ptr == nullptr)) {
-			error("failed to create file '", path, "'");
-			env.parent().exit(-1);
-		}
-		handle_ptr->resize(size);
-		handle_ptr->ds().close(handle_ptr);
-		env.parent().exit(0);
+		fs.open(path.string(), { .writeable = true, .create = create }, heap).with_result(
+			[&] (Vfs::File_channel &c) {
+				c.resize(size);
+				c.destruct();
+				env.parent().exit(0);
+			},
+			[&] (Vfs::Open_error) {
+				error("failed to create file '", path, "'");
+				env.parent().exit(-1);
+			});
 	}
 };
 

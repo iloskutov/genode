@@ -16,7 +16,6 @@
 
 #include <base/registry.h>
 #include <vfs/file_system.h>
-#include <vfs/vfs_handle.h>
 
 namespace Genode::Vfs {
 	class Dir_handles;

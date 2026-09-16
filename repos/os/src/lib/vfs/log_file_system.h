@@ -58,9 +58,11 @@ class Vfs_log::File_system : public Single_file_system
 
 		Log_session &_log;
 
-		class Log_vfs_handle : public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
+
+				Allocator &_alloc;
 
 				char _line_buf[Log_session::MAX_STRING_LEN];
 
@@ -91,13 +93,12 @@ class Vfs_log::File_system : public Single_file_system
 
 			public:
 
-				Log_vfs_handle(Directory_service &ds,
-				               Allocator &alloc, Log_session &log)
+				File_channel(Allocator &alloc, Attr attr, Log_session &log)
 				:
-					Single_vfs_handle(ds, alloc, 0), _log(log)
+					Vfs::File_channel(attr), _alloc(alloc), _log(log)
 				{ }
 
-				~Log_vfs_handle()
+				~File_channel()
 				{
 					if (_line_pos > 0) _flush();
 				}
@@ -110,6 +111,9 @@ class Vfs_log::File_system : public Single_file_system
 
 				Write_result write(At, Const_byte_range_ptr const &buf) override
 				{
+					if (!writeable)
+						return Write_error::DENIED;
+
 					size_t       count = buf.num_bytes;
 					char const * src   = buf.start;
 
@@ -142,7 +146,7 @@ class Vfs_log::File_system : public Single_file_system
 
 				Sync_result sync() override
 				{
-					if (_line_pos > 0)
+					if (writeable && _line_pos > 0)
 						_flush();
 
 					return Sync_result::OK;
@@ -156,6 +160,8 @@ class Vfs_log::File_system : public Single_file_system
 					 */
 					return Resize_result::OK;
 				}
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -176,20 +182,17 @@ class Vfs_log::File_system : public Single_file_system
 		 ** Directory service interface **
 		 *********************************/
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Log_vfs_handle(*this, alloc, _log);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, _log);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		static constexpr auto BUILTIN_FS_TYPE = "log";

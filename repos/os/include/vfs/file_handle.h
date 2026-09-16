@@ -16,7 +16,6 @@
 
 #include <base/registry.h>
 #include <vfs/file_system.h>
-#include <vfs/vfs_handle.h>
 
 namespace Genode::Vfs {
 	class File_handles;
@@ -36,7 +35,7 @@ class Genode::Vfs::File_handle : Noncopyable
 		Path const path;
 		bool const writeable;
 
-		using Channel = Vfs_handle;
+		using Channel = File_channel;
 
 		enum class Attach_error { RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
@@ -59,15 +58,6 @@ class Genode::Vfs::File_handle : Noncopyable
 		template <typename ERR>
 		static ERR _converted(Attach_error e) { return converted_error<ERR>(e); }
 
-		unsigned _mode() const
-		{
-			if (writeable)
-				return Directory_service::OPEN_MODE_RDWR
-				     | Directory_service::OPEN_MODE_CREATE;
-
-			return Directory_service::OPEN_MODE_RDONLY;
-		}
-
 		template <typename ERR_FN>
 		auto _with_channel(auto const &fn, ERR_FN const &err_fn)
 		-> typename Trait::Functor<decltype(&ERR_FN::operator())>::Return_type
@@ -75,30 +65,39 @@ class Genode::Vfs::File_handle : Noncopyable
 			bool const orig_detached = _channel_ptr == nullptr;
 
 			if (!_channel_ptr) {
-				Directory_service::Open_result result =
-					_root_dir.open(path.string(), _mode(), &_channel_ptr, _alloc);
+				Open_error error = Open_error::DENIED;
 
-				/* reattempt w/o CREATE flag to avoid reflecting OPEN_ERR_EXISTS */
-				if (result == Directory_service::OPEN_ERR_EXISTS)
-					result = _root_dir.open(path.string(), Directory_service::OPEN_MODE_RDWR,
-					                        &_channel_ptr, _alloc);
+				auto try_open_existing_file = [&]
+				{
+					_root_dir.open(path.string(), { .writeable = writeable, .create = false },
+					               _alloc).with_result(
+						[&] (File_channel &c) { _channel_ptr = &c; },
+						[&] (Open_error e)    { error = e; });
+				};
 
-				switch (result) {
-				case Directory_service::OPEN_ERR_UNACCESSIBLE:
-				case Directory_service::OPEN_ERR_NO_PERM:
-				case Directory_service::OPEN_ERR_EXISTS:
-				case Directory_service::OPEN_ERR_NAME_TOO_LONG:
-				case Directory_service::OPEN_ERR_NO_SPACE:    return err_fn(Attach_error::DENIED);
-				case Directory_service::OPEN_ERR_OUT_OF_RAM:  return err_fn(Attach_error::OUT_OF_RAM);
-				case Directory_service::OPEN_ERR_OUT_OF_CAPS: return err_fn(Attach_error::OUT_OF_CAPS);
-				case Directory_service::OPEN_OK: break;
-				}
+				if (!writeable)
+					try_open_existing_file();
+				else
+					_root_dir.open(path.string(), { .writeable = writeable, .create = true },
+					               _alloc).with_result(
+						[&] (File_channel &c) { _channel_ptr = &c; },
+						[&] (Open_error e) {
+							error = e;
+							if (e != Open_error::DENIED)
+								return;
+
+							/* reattempt w/o create flag */
+							try_open_existing_file();
+						});
+
+				if (!_channel_ptr)
+					return err_fn(converted_error<Attach_error>(error));
 			}
 
 			if (_channel_ptr) {
 
 				if (response_handler_ptr)
-					_channel_ptr->handler(response_handler_ptr);
+					_channel_ptr->handler(*response_handler_ptr);
 
 				if (orig_detached && _read_ready_requested) {
 
@@ -153,7 +152,7 @@ class Genode::Vfs::File_handle : Noncopyable
 				_need_sync = false;
 			}
 
-			_channel_ptr->ds().close(_channel_ptr);
+			_channel_ptr->destruct();
 			_channel_ptr = nullptr;
 			return Detach_result::OK;
 		}
@@ -276,7 +275,7 @@ Genode::Vfs::Update_mtime_result Genode::Vfs::File_handle::update_mtime(Timestam
 	return _with_channel(
 		[&] (Channel &channel) {
 			_need_sync = true;
-			if (channel.update_mtime(t) == Vfs_handle::Update_mtime_result::OK)
+			if (channel.update_mtime(t) == File_channel::Update_mtime_result::OK)
 				return Update_mtime_result::OK;
 			return Update_mtime_result::RETRY;
 		},

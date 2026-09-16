@@ -16,7 +16,6 @@
 /* Genode includes */
 #include <rump/env.h>
 #include <rump_fs/fs.h>
-#include <vfs/vfs_handle.h>
 #include <vfs/env.h>
 #include <os/path.h>
 
@@ -87,12 +86,9 @@ class Vfs_rump::File_system : public Vfs::File_system
 		using Rump_watch_handles = List<Rump_watch_handle>;
 		Rump_watch_handles _watchers { };
 
-		struct Rump_vfs_file_handle;
-		using Rump_vfs_file_handles = List<Rump_vfs_file_handle>;
-		Rump_vfs_file_handles _file_handles;
-
-		struct Rump_vfs_handle : Vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator   &_alloc;
 			File_system &_fs;
 
 			struct Attr
@@ -100,34 +96,25 @@ class Vfs_rump::File_system : public Vfs::File_system
 				Path path;
 				int  fd;
 				bool new_dir_entry;
+				bool writeable;
 			};
 
 			Attr const attr;
 
-			Rump_vfs_handle(File_system &fs, Allocator &alloc, int flags, Attr attr)
+			bool modifying = false;
+
+			File_channel(Allocator &alloc, File_system &fs, Attr attr)
 			:
-				Vfs_handle(fs, alloc, flags), _fs(fs), attr(attr)
+				Vfs::File_channel({ .writeable = attr.writeable }),
+				_alloc(alloc), _fs(fs), attr(attr)
 			{ }
 
-			~Rump_vfs_handle()
+			~File_channel()
 			{
+				rump_sys_close(attr.fd);
 				if (attr.new_dir_entry)
 					_fs._notify_compound_dir_watchers(attr.path.base());
 			}
-		};
-
-		struct Rump_vfs_file_handle : Rump_vfs_handle, Rump_vfs_file_handles::Element
-		{
-			File_system &_fs;
-
-			bool modifying = false;
-
-			Rump_vfs_file_handle(File_system &fs, Allocator &alloc, int flags, Attr attr)
-			:
-				Rump_vfs_handle(fs, alloc, flags, attr), _fs(fs)
-			{ }
-
-			~Rump_vfs_file_handle() { rump_sys_close(attr.fd); }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -213,6 +200,8 @@ class Vfs_rump::File_system : public Vfs::File_system
 				rump_sys_futimens(attr.fd, (const timespec*)&ts);
 				return Update_mtime_result::OK;
 			}
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		struct Rump_dir_channel : Vfs::Dir_channel
@@ -513,47 +502,47 @@ class Vfs_rump::File_system : public Vfs::File_system
 			return rump_sys_lstat(path, &s) == 0;
 		}
 
-		Open_result open(char const *path, unsigned mode,
-		                 Vfs_handle **handle,
-		                 Allocator  &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			/* OPEN_MODE_CREATE (or O_EXC) will not work */
-			bool create = mode & OPEN_MODE_CREATE;
-			if (create)
+			unsigned mode = attr.writeable ? O_RDWR : O_RDONLY;
+
+			if (attr.create)
 				mode |= O_CREAT;
 
-			bool const new_dir_entry = create && !dir_entry_exists(path);
+			bool const new_dir_entry = attr.create && !dir_entry_exists(path);
 
 			enum { DEFAULT_PERMISSIONS = 0777 };
-			int fd = create ? rump_sys_open(path, mode, DEFAULT_PERMISSIONS) : rump_sys_open(path, mode);
+			int const fd = attr.create ? rump_sys_open(path, mode, DEFAULT_PERMISSIONS)
+			                           : rump_sys_open(path, mode);
+
 			if (fd == -1) switch (errno) {
-			case ENAMETOOLONG: return OPEN_ERR_NAME_TOO_LONG;
-			case EACCES:       return OPEN_ERR_NO_PERM;
-			case ENOENT:       return OPEN_ERR_UNACCESSIBLE;
-			case EEXIST:       return OPEN_ERR_EXISTS;
-			case ENOSPC:       return OPEN_ERR_NO_SPACE;
 			default:
 				error(__func__, ": unhandled rump error ", errno);
-				return OPEN_ERR_NO_PERM;
+				[[fallthrough]];
+			case ENAMETOOLONG:
+			case EACCES:
+			case ENOENT:
+			case EEXIST:
+			case ENOSPC:
+				return Open_error::DENIED;
 			}
 
+			Open_error error = Open_error::DENIED;
 			try {
-				Rump_vfs_file_handle *h = new (alloc)
-					Rump_vfs_file_handle(*this, alloc, mode, {
+				File_channel &c = *new (alloc)
+					File_channel(alloc, *this, {
 						.path          = { path },
 						.fd            = fd,
-						.new_dir_entry = new_dir_entry
+						.new_dir_entry = new_dir_entry,
+						.writeable     = attr.writeable
 					});
-				if (create) h->modifying = true;
-				*handle = h;
-				return OPEN_OK;
-			} catch (Out_of_ram) {
-				rump_sys_close(fd);
-				return OPEN_ERR_OUT_OF_RAM;
-			} catch (Out_of_caps) {
-				rump_sys_close(fd);
-				return OPEN_ERR_OUT_OF_CAPS;
+				if (attr.create) c.modifying = true;
+				return c;
 			}
+			catch (Out_of_ram)  { error = Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { error = Open_error::OUT_OF_CAPS; }
+			rump_sys_close(fd);
+			return error;
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -589,16 +578,6 @@ class Vfs_rump::File_system : public Vfs::File_system
 				rump_sys_close(fd);
 
 			return error;
-		}
-
-		void close(Vfs_handle *vfs_handle) override
-		{
-			if (Rump_vfs_file_handle *handle =
-				dynamic_cast<Rump_vfs_file_handle *>(vfs_handle))
-			{
-				_file_handles.remove(handle);
-				destroy(vfs_handle->alloc(), handle);
-			}
 		}
 
 		Stat_result stat(char const *path, Stat &stat)

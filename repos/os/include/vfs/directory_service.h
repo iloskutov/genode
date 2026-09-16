@@ -34,48 +34,17 @@ struct Genode::Vfs::Directory_service : Interface
 
 	enum General_error { ERR_FD_INVALID, NUM_GENERAL_ERRORS };
 
-	/**
-	 * Flags of 'mode' argument of open syscall
-	 */
-	enum Open_mode {
-		OPEN_MODE_RDONLY  = 0,
-		OPEN_MODE_WRONLY  = 1,
-		OPEN_MODE_RDWR    = 2,
-		OPEN_MODE_ACCMODE = 3,
-		OPEN_MODE_CREATE  = 0x0800, /* libc O_EXCL */
-	};
+	struct Open_attr { bool writeable, create; };
 
-	enum Open_result
+	virtual Open_result open(char const *path, Open_attr, Allocator &)
 	{
-		OPEN_ERR_UNACCESSIBLE,
-		OPEN_ERR_NO_PERM,
-		OPEN_ERR_EXISTS,
-		OPEN_ERR_NAME_TOO_LONG,
-		OPEN_ERR_NO_SPACE,
-		OPEN_ERR_OUT_OF_RAM,
-		OPEN_ERR_OUT_OF_CAPS,
-		OPEN_OK
-	};
-
-	virtual Open_result open(char const *path, unsigned mode,
-	                         Vfs_handle **, Allocator &)
-	{
-		(void)path; (void)mode; return OPEN_ERR_UNACCESSIBLE;
+		(void)path; return Open_error::DENIED;
 	}
 
 	virtual Opendir_result opendir(char const *path, Allocator &)
 	{
 		(void)path; return Opendir_error::DENIED;
 	}
-
-	/**
-	 * Close handle resources and deallocate handle
-	 *
-	 * Note: it might be necessary to call 'sync()' before 'close()'
-	 *       to ensure that previously written data has been completely
-	 *       processed.
-	 */
-	virtual void close(Vfs_handle *) { }
 
 	/**
 	 * Subscribe to watch notifications for the given relative path

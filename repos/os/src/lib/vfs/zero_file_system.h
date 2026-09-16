@@ -40,14 +40,15 @@ struct Vfs_zero::File_system : Single_file_system
 		_size(config.attribute_value("size", Number_of_bytes(0)))
 	{ }
 
-	struct Zero_vfs_handle : Single_vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
+		Allocator &_alloc;
 		size_t const _size;
 
-		Zero_vfs_handle(Directory_service &ds, Allocator &alloc, size_t size)
+		File_channel(Allocator &alloc, size_t size)
 		:
-			Single_vfs_handle(ds, alloc, 0),
-			_size(size)
+			Vfs::File_channel({ .writeable = false }),
+			_alloc(alloc), _size(size)
 		{ }
 
 		Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -75,25 +76,22 @@ struct Vfs_zero::File_system : Single_file_system
 
 		bool read_ready()  const override { return true; }
 		bool write_ready() const override { return true; }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
 	/*********************************
 	 ** Directory service interface **
 	 *********************************/
 
-	Open_result open(char const  *path, unsigned,
-	                 Vfs_handle **out_handle,
-	                 Allocator   &alloc) override
+	Open_result open(char const *path, Open_attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))
-			return OPEN_ERR_UNACCESSIBLE;
+			return Open_error::DENIED;
 
-		try {
-			*out_handle = new (alloc) Zero_vfs_handle(*this, alloc, _size);
-			return OPEN_OK;
-		}
-		catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-		catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+		try { return *new (alloc) File_channel(alloc, _size); }
+		catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+		catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 	}
 
 	Stat_result stat(char const *path, Stat &out) override

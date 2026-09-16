@@ -40,15 +40,16 @@ class Vfs_libusb::File_system : public Vfs::Single_file_system
 
 		Vfs::Env &_env;
 
-		class Libusb_vfs_handle : public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
+				Allocator      &_alloc;
 				Genode::Env    &_env;
 				Vfs::Env::User &_vfs_user;
 
-				Io_signal_handler<Libusb_vfs_handle> _handler {
-					_env.ep(), *this, &Libusb_vfs_handle::_handle };
+				Io_signal_handler<File_channel> _handler {
+					_env.ep(), *this, &File_channel::_handle };
 
 				void _handle()
 				{
@@ -58,13 +59,12 @@ class Vfs_libusb::File_system : public Vfs::Single_file_system
 
 			public:
 
-				Libusb_vfs_handle(Directory_service &ds,
-				                  Allocator         &alloc,
-				                  Genode::Env       &env,
-				                  Vfs::Env::User    &vfs_user)
+				File_channel(Allocator         &alloc,
+				             Genode::Env       &env,
+				             Vfs::Env::User    &vfs_user)
 				:
-					Single_vfs_handle(ds, alloc, 0),
-					_env(env), _vfs_user(vfs_user)
+					Vfs::File_channel({ .writeable = false }),
+					_alloc(alloc), _env(env), _vfs_user(vfs_user)
 				{
 					log("libusb: waiting until device is plugged...");
 					libusb_genode_backend_init(env, alloc, _handler);
@@ -79,6 +79,8 @@ class Vfs_libusb::File_system : public Vfs::Single_file_system
 
 				bool write_ready() const override {
 					return true; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -94,16 +96,12 @@ class Vfs_libusb::File_system : public Vfs::Single_file_system
 
 		void destruct() override { destroy(_env.alloc(), this); }
 
-		Open_result open(char const *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			*out_handle = new (alloc)
-				Libusb_vfs_handle(*this, alloc, _env.env(), _env.user());
-			return OPEN_OK;
+			return *new (alloc) File_channel(alloc, _env.env(), _env.user());
 		}
 };
 

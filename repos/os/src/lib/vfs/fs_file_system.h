@@ -321,7 +321,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return result;
 		}
 
-		struct Fs_vfs_handle : Vfs_handle, private Open_fs_handle, private Handle_state
+		struct File_channel : Vfs::File_channel, private Open_fs_handle,
+		                                         private Handle_state
 		{
 			using Handle_state::queued_read_state;
 			using Handle_state::queued_read_packet;
@@ -331,16 +332,17 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 			using Open_fs_handle::file_handle;
 
+			Allocator   &_alloc;
 			File_system &_fs;
 
-			Fs_vfs_handle(File_system &fs, Allocator &alloc,
-			              int status_flags, Handle_space &space,
-			              ::File_system::Node_handle node_handle)
+			File_channel(Allocator &alloc, Attr attr, File_system &fs,
+			              Handle_space &space, ::File_system::Node_handle node_handle)
 			:
-				Vfs_handle(fs, alloc, status_flags),
-				Open_fs_handle(space, node_handle),
-				_fs(fs)
+				Vfs::File_channel(attr), Open_fs_handle(space, node_handle),
+				_alloc(alloc), _fs(fs)
 			{ }
+
+			~File_channel() { _fs._fs.close(file_handle()); }
 
 			/**
 			 * Open_handle interface
@@ -545,11 +547,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 				return Resize_result::OK;
 			}
-		};
 
-		struct Fs_vfs_file_handle : Fs_vfs_handle
-		{
-			using Fs_vfs_handle::Fs_vfs_handle;
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		struct Fs_dir_channel : Vfs::Dir_channel, private Open_fs_handle
@@ -629,19 +628,18 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		/**
 		 * Helper for managing the lifetime of temporary open node handles
 		 */
-		struct Fs_handle_guard : Fs_vfs_handle
+		struct Fs_handle_guard : Noncopyable
 		{
-			Fs_handle_guard(File_system &fs,
-			                ::File_system::Node_handle fs_handle,
-			                Handle_space &space)
+			File_system &_fs;
+
+			::File_system::Node_handle _handle;
+
+			Fs_handle_guard(File_system &fs, ::File_system::Node_handle handle)
 			:
-				Fs_vfs_handle(fs, *(Allocator*)nullptr, 0, space, fs_handle)
+				_fs(fs), _handle(handle)
 			{ }
 
-			~Fs_handle_guard()
-			{
-				_fs._fs.close(file_handle());
-			}
+			~Fs_handle_guard() { _fs._fs.close(_handle); }
 		};
 
 		using Watched_path = String<MAX_PATH_LEN>;
@@ -747,7 +745,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 			try {
 				::File_system::Node_handle node = _fs.node(path);
-				Fs_handle_guard node_guard(*this, node, _handle_space);
+				Fs_handle_guard node_guard(*this, node);
 				status = _fs.status(node);
 			}
 			catch (Out_of_ram)  {
@@ -782,7 +780,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 			try {
 				::File_system::Dir_handle dir = _fs.dir(dir_path.base(), false);
-				Fs_handle_guard dir_guard(*this, dir, _handle_space);
+				Fs_handle_guard dir_guard(*this, dir);
 
 				_fs.unlink(dir, file_name.base() + 1);
 			}
@@ -817,11 +815,11 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				::File_system::Dir_handle from_dir =
 					_fs.dir(from_dir_path.base(), false);
 
-				Fs_handle_guard from_dir_guard(*this, from_dir, _handle_space);
+				Fs_handle_guard from_dir_guard(*this, from_dir);
 
 				::File_system::Dir_handle to_dir = _fs.dir(to_dir_path.base(),
 				                                           false);
-				Fs_handle_guard to_dir_guard(*this, to_dir, _handle_space);
+				Fs_handle_guard to_dir_guard(*this, to_dir);
 
 				_fs.move(from_dir, from_file_name.base() + 1,
 				         to_dir,   to_file_name.base() + 1);
@@ -920,7 +918,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				try {
 					::File_system::Dir_handle dir_handle = _fs.dir(abs_path.base(), false);
 
-					Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
+					Fs_handle_guard from_dir_guard(*this, dir_handle);
 
 					bool already_exists = false;
 					Symlink_result result = Symlink_result::DENIED;
@@ -1040,7 +1038,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 						try {
 							::File_system::Dir_handle dir_handle = _fs.dir(abs_path.base(), false);
 
-							Fs_handle_guard from_dir_guard(*this, dir_handle, _handle_space);
+							Fs_handle_guard from_dir_guard(*this, dir_handle);
 
 							auto const &name_wo_slash = symlink_name.string() + 1;
 							::File_system::Symlink_handle symlink =
@@ -1103,7 +1101,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 			try {
 				::File_system::Dir_handle dir = _fs.dir(path, false);
-				Fs_handle_guard node_guard(*this, dir, _handle_space);
+				Fs_handle_guard node_guard(*this, dir);
 
 				return _fs.num_entries(dir);
 			}
@@ -1115,7 +1113,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		{
 			try {
 				::File_system::Node_handle node = _fs.node(path);
-				Fs_handle_guard node_guard(*this, node, _handle_space);
+				Fs_handle_guard node_guard(*this, node);
 
 				::File_system::Status status = _fs.status(node);
 
@@ -1129,7 +1127,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 		{
 			try {
 				::File_system::Node_handle node = _fs.node(path);
-				Fs_handle_guard node_guard(*this, node, _handle_space);
+				Fs_handle_guard node_guard(*this, node);
 
 				::File_system::Status status = _fs.status(node);
 
@@ -1151,8 +1149,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			return true;
 		}
 
-		Open_result open(char const *path, unsigned vfs_mode, Vfs_handle **out_handle,
-		                 Allocator& alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			Absolute_path dir_path(path);
 			dir_path.strip_last_element();
@@ -1160,40 +1157,31 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			Absolute_path file_name(path);
 			file_name.keep_only_last_element();
 
-			::File_system::Mode mode;
-
-			switch (vfs_mode & OPEN_MODE_ACCMODE) {
-			default:               mode = ::File_system::STAT_ONLY;  break;
-			case OPEN_MODE_RDONLY: mode = ::File_system::READ_ONLY;  break;
-			case OPEN_MODE_WRONLY: mode = ::File_system::WRITE_ONLY; break;
-			case OPEN_MODE_RDWR:   mode = ::File_system::READ_WRITE; break;
-			}
-
-			bool const create = vfs_mode & OPEN_MODE_CREATE;
-
+			::File_system::Mode const mode = attr.writeable
+			                               ? ::File_system::READ_WRITE
+			                               : ::File_system::READ_ONLY;
 			try {
 				::File_system::Dir_handle dir = _fs.dir(dir_path.base(), false);
-				Fs_handle_guard dir_guard(*this, dir, _handle_space);
+				Fs_handle_guard dir_guard(*this, dir);
 
 				::File_system::File_handle file = _fs.file(dir,
 				                                           file_name.base() + 1,
-				                                           mode, create);
-
-				*out_handle = new (alloc)
-					Fs_vfs_file_handle(*this, alloc, vfs_mode, _handle_space, file);
+				                                           mode, attr.create);
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, *this, _handle_space, file);
 			}
-			catch (::File_system::Lookup_failed)       { return OPEN_ERR_UNACCESSIBLE;  }
-			catch (::File_system::Permission_denied)   { return OPEN_ERR_NO_PERM;       }
-			catch (::File_system::Invalid_handle)      { return OPEN_ERR_UNACCESSIBLE;  }
-			catch (::File_system::Node_already_exists) { return OPEN_ERR_EXISTS;        }
-			catch (::File_system::Invalid_name)        { return OPEN_ERR_NAME_TOO_LONG; }
-			catch (::File_system::Name_too_long)       { return OPEN_ERR_NAME_TOO_LONG; }
-			catch (::File_system::No_space)            { return OPEN_ERR_NO_SPACE;      }
-			catch (::File_system::Unavailable)         { return OPEN_ERR_UNACCESSIBLE;  }
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (::File_system::Lookup_failed)       { }
+			catch (::File_system::Permission_denied)   { }
+			catch (::File_system::Invalid_handle)      { }
+			catch (::File_system::Node_already_exists) { }
+			catch (::File_system::Invalid_name)        { }
+			catch (::File_system::Name_too_long)       { }
+			catch (::File_system::No_space)            { }
+			catch (::File_system::Unavailable)         { }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 
-			return OPEN_OK;
+			return Open_error::DENIED;
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -1219,14 +1207,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				_fs.close(dir);
 
 			return error;
-		}
-
-		void close(Vfs_handle *vfs_handle) override
-		{
-			Fs_vfs_handle *fs_handle = static_cast<Fs_vfs_handle *>(vfs_handle);
-
-			_fs.close(fs_handle->file_handle());
-			destroy(fs_handle->alloc(), fs_handle);
 		}
 
 		Watch_result watch(char const *path) override

@@ -15,7 +15,6 @@
 #define _INCLUDE__VFS__SINGLE_FILE_SYSTEM_H_
 
 #include <vfs/file_system.h>
-#include <vfs/vfs_handle.h>
 
 namespace Genode::Vfs { class Single_file_system; }
 
@@ -78,11 +77,6 @@ class Genode::Vfs::Single_file_system : public File_system
 			         .writeable  = rwx.w != File::Write::DENIED,
 			         .executable = rwx.x };
 		}
-
-		struct Single_vfs_handle : Vfs_handle
-		{
-			using Vfs_handle::Vfs_handle;
-		};
 
 		struct Single_dir_channel : Vfs::Dir_channel
 		{
@@ -205,12 +199,6 @@ class Genode::Vfs::Single_file_system : public File_system
 			}
 			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
 			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
-		}
-
-		void close(Vfs_handle *handle) override
-		{
-			if (handle && (&handle->ds() == this))
-				destroy(handle->alloc(), handle);
 		}
 
 		Unlink_result unlink(char const *path) override

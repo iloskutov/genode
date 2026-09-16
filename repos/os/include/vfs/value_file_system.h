@@ -37,15 +37,15 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 
 		Buffer _buffer { };
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator         &_alloc;
 			Value_file_system &_value_fs;
-			Buffer            &_buffer{ _value_fs._buffer };
+			Buffer            &_buffer { _value_fs._buffer };
 
-			Vfs_handle(Value_file_system &value_fs, Allocator &alloc)
+			File_channel(Allocator &alloc, Attr attr, Value_file_system &value_fs)
 			:
-				Single_vfs_handle(value_fs, alloc, 0),
-				_value_fs(value_fs)
+				Vfs::File_channel(attr), _alloc(alloc), _value_fs(value_fs)
 			{ }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -62,7 +62,7 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 
 			Write_result write(At const at, Const_byte_range_ptr const &src) override
 			{
-				if (at.pos > BUF_SIZE)
+				if (!writeable || at.pos > BUF_SIZE)
 					return Write_error::DENIED;
 
 				size_t const len = min(size_t(BUF_SIZE - at.pos), src.num_bytes);
@@ -76,7 +76,7 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 
 			Resize_result resize(file_size size) override
 			{
-				if (size >= BUF_SIZE)
+				if (!writeable || size >= BUF_SIZE)
 					return Resize_result::DENIED;
 
 				return Resize_result::OK;
@@ -85,10 +85,7 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
 
-			private:
-
-			Vfs_handle(Vfs_handle const &);
-			Vfs_handle &operator = (Vfs_handle const &); 
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -120,19 +117,17 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 
 		Buffer buffer() const  { return _buffer; }
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Vfs_handle(*this, alloc);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, *this);
 			}
-			catch (Out_of_ram)  { error("out of ram"); return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { error("out of caps");return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -141,8 +136,6 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 			out.size = _buffer.length();
 			return result;
 		}
-
-		using Single_file_system::close;
 };
 
 #endif /* _VALUE_FILE_SYSTEM_H_ */

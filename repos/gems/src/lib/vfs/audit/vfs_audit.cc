@@ -11,7 +11,6 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
-#include <vfs/vfs_handle.h>
 #include <vfs/env.h>
 #include <log_session/connection.h>
 
@@ -84,22 +83,29 @@ class Vfs_audit::File_system : public Vfs::File_system
 			return Absolute_path(path+1, _audit_path.string());
 		}
 
-		struct Handle final : Vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			Handle(Handle const &);
-			Handle &operator = (Handle const &);
+			Allocator &_alloc;
+			Log       &_audit_log;
 
-			Log &_audit_log;
 			Absolute_path const path;
-			Vfs_handle &audited;
+
+			Vfs::File_channel &audited;
 
 			void _log(auto &&... args) { _audit_log.log(args...); }
 
-			Handle(Vfs_audit::File_system &fs, Allocator &alloc,
-			       int flags, char const *path, Log &log, Vfs_handle &audited)
+			File_channel(Allocator &alloc, Attr attr, char const *path,
+			             Log &log, Vfs::File_channel &audited)
 			:
-				Vfs_handle(fs, alloc, flags), _audit_log(log), path(path), audited(audited)
+				Vfs::File_channel(attr),
+				_alloc(alloc), _audit_log(log), path(path), audited(audited)
 			{ }
+
+			~File_channel()
+			{
+				_log("close ", path.string());
+				audited.destruct();
+			}
 
 			Write_result write(At const at, Const_byte_range_ptr const &src) override
 			{
@@ -166,6 +172,8 @@ class Vfs_audit::File_system : public Vfs::File_system
 
 				return result;
 			}
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		struct Dir_channel : Vfs::Dir_channel
@@ -238,20 +246,26 @@ class Vfs_audit::File_system : public Vfs::File_system
 			return _fs.release(_expand(path).string(), ds);
 		}
 
-		Open_result open(const char *path, unsigned int mode, Vfs::Vfs_handle **out, Allocator &alloc) override
+		Open_result open(const char *path, Open_attr attr, Allocator &alloc) override
 		{
-			_log(__func__, " ", path, " ", Hex(mode, Hex::OMIT_PREFIX, Hex::PAD));
+			_log(__func__, " ", path, " writeable=", attr.writeable);
 
-			Vfs_handle *audited = nullptr;
-			Open_result r = _fs.open(_expand(path).string(), mode, &audited, alloc);
-
-			if (!audited || r != OPEN_OK)
-				return r;
-
-			try { *out = new (alloc) Handle(*this, alloc, mode, path, _audit_log, *audited); }
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM;  }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
-			return r;
+			return _fs.open(_expand(path).string(), attr, alloc).convert<Open_result>(
+				[&] (Vfs::File_channel &audited) -> Open_result {
+					Open_error error = Open_error::DENIED;
+					try {
+						Vfs::File_channel &c = *new (alloc)
+							File_channel(alloc, { .writeable = attr.writeable },
+							             path, _audit_log, audited);
+						return c;
+					}
+					catch (Out_of_ram)  { error = Open_error::OUT_OF_RAM;  }
+					catch (Out_of_caps) { error = Open_error::OUT_OF_CAPS; }
+					audited.destruct();
+					return error;
+				},
+				[&] (Open_error e) -> Open_result { return e; }
+			);
 		}
 
 		Opendir_result opendir(char const *path, Allocator &alloc) override
@@ -267,16 +281,6 @@ class Vfs_audit::File_system : public Vfs::File_system
 					catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
 				},
 				[&] (Opendir_error e) -> Opendir_result { return e; });
-		}
-
-		void close(Vfs::Vfs_handle *vfs_handle) override
-		{
-			Handle *h = static_cast<Handle*>(vfs_handle);
-			_log(__func__, " ", h->path);
-			if (h) {
-				h->audited.ds().close(&h->audited);
-				destroy(h->alloc(), h);
-			}
 		}
 
 		Stat_result stat(const char *path, Vfs::Directory_service::Stat &buf) override

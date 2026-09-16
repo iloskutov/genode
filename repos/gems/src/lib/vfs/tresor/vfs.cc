@@ -889,17 +889,19 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 {
 	private:
 
-		class Vfs_handle : private Noncopyable, public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
-				Plugin &_plugin;
+				Allocator &_alloc;
+				Plugin    &_plugin;
 
 			public:
 
-				Vfs_handle(Directory_service &ds, Allocator &alloc, Plugin &plugin)
+				File_channel(Allocator &alloc, Plugin &plugin)
 				:
-					Single_vfs_handle(ds, alloc, 0), _plugin(plugin)
+					Vfs::File_channel({ .writeable = true }),
+					_alloc(alloc), _plugin(plugin)
 				{ }
 
 				Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -953,6 +955,8 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 		Plugin &_plugin;
@@ -981,13 +985,12 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 			return result;
 		}
 
-		Open_result open(char const *path, unsigned, Vfs::Vfs_handle **out_handle, Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			*out_handle = new (alloc) Vfs_handle(*this, alloc, _plugin);
-			return OPEN_OK;
+			return *new (alloc) File_channel(alloc, _plugin);
 		}
 };
 
@@ -998,11 +1001,12 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 
 		using Content_string = String<11>;
 
-		class Vfs_handle : private Noncopyable, public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
-				Plugin &_plugin;
+				Allocator &_alloc;
+				Plugin    &_plugin;
 
 				static Read_result _read_ok(Content_string const &content, Byte_range_ptr const &dst)
 				{
@@ -1012,9 +1016,10 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 
 			public:
 
-				Vfs_handle(Directory_service &ds, Allocator &alloc, Plugin &plugin)
+				File_channel(Allocator &alloc, Plugin &plugin)
 				:
-					Single_vfs_handle(ds, alloc, 0), _plugin(plugin)
+					Vfs::File_channel({ .writeable = true }),
+					_alloc(alloc), _plugin(plugin)
 				{ }
 
 				Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -1083,6 +1088,8 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 		Plugin &_plugin;
@@ -1103,17 +1110,16 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 
 		void notify_watchers() { Single_file_system::_notify_watchers(); }
 
-		Open_result open(char const *path, unsigned, Vfs::Vfs_handle **out_handle, Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Vfs_handle(*this, alloc, _plugin);
-				return OPEN_OK;
+				return *new (alloc) File_channel(alloc, _plugin);
 			}
-			catch (Out_of_ram) { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM;  }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -1133,11 +1139,12 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 
 		using Content_string = String<11>;
 
-		class Vfs_handle : private Noncopyable, public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
-				Plugin &_plugin;
+				Allocator &_alloc;
+				Plugin    &_plugin;
 
 				static Read_result _read_ok(Content_string const &content, Byte_range_ptr const &dst)
 				{
@@ -1147,9 +1154,10 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 
 			public:
 
-				Vfs_handle(Directory_service &ds, Allocator &alloc, Plugin &plugin)
+				File_channel(Allocator &alloc, Plugin &plugin)
 				:
-					Single_vfs_handle(ds, alloc, 0), _plugin(plugin)
+					Vfs::File_channel({ .writeable = true }),
+					_alloc(alloc), _plugin(plugin)
 				{ }
 
 				Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -1200,6 +1208,8 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -1218,17 +1228,16 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 
 		void notify_watchers() { Single_file_system::_notify_watchers(); }
 
-		Open_result open(char const *path, unsigned, Vfs::Vfs_handle **out_handle, Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Vfs_handle(*this, alloc, _plugin);
-				return OPEN_OK;
+				return *new (alloc) File_channel(alloc, _plugin);
 			}
-			catch (Out_of_ram) { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -1248,11 +1257,12 @@ class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_
 
 		Plugin &_plugin;
 
-		class Vfs_handle : public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
-				Plugin &_plugin;
+				Allocator &_alloc;
+				Plugin    &_plugin;
 
 				static Read_result _read_ok(Content_string const &content, Byte_range_ptr const &dst)
 				{
@@ -1262,9 +1272,10 @@ class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_
 
 			public:
 
-				Vfs_handle(Directory_service &ds, Allocator &alloc, Plugin &plugin)
+				File_channel(Allocator &alloc, Plugin &plugin)
 				:
-					Single_vfs_handle(ds, alloc, 0), _plugin(plugin)
+					Vfs::File_channel({ .writeable = true }),
+					_alloc(alloc), _plugin(plugin)
 				{ }
 
 				Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -1316,6 +1327,8 @@ class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -1334,17 +1347,16 @@ class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_
 
 		void notify_watchers() { Single_file_system::_notify_watchers(); }
 
-		Open_result open(char const  *path, unsigned, Vfs::Vfs_handle **out_handle, Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Vfs_handle(*this, alloc, _plugin);
-				return OPEN_OK;
+				return *new (alloc) File_channel(alloc, _plugin);
 			}
-			catch (Out_of_ram) { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

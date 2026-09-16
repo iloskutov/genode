@@ -111,15 +111,15 @@ class Vfs_trace::Trace_buffer_file_system : public Single_file_system
 
 	public:
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator     &_alloc;
 			Trace_entries &_entries;
 
-			Vfs_handle(Directory_service &ds,
-			           Allocator         &alloc,
-			           Trace_entries     &entries)
+			File_channel(Allocator &alloc, Trace_entries &entries)
 			:
-				Single_vfs_handle(ds, alloc, 0), _entries(entries)
+				Vfs::File_channel({ .writeable = false }),
+				_alloc(alloc), _entries(entries)
 			{ }
 
 			Read_result read(At, Byte_range_ptr const &dst) override
@@ -141,6 +141,8 @@ class Vfs_trace::Trace_buffer_file_system : public Single_file_system
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return false; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 		Trace_buffer_file_system(Vfs::Env &env, Parent_fs &parent_fs,
@@ -161,14 +163,14 @@ class Vfs_trace::Trace_buffer_file_system : public Single_file_system
 		 ** File-system interface **
 		 ***************************/
 
-		Open_result open(char const  *path, unsigned, Vfs::Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			*out_handle = new (alloc) Vfs_handle(*this, alloc, _entries);
-			return OPEN_OK;
+			try { return *new (alloc) File_channel(alloc, _entries); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

@@ -140,6 +140,7 @@ config | verbose: yes
   |   + dir dev | + symlink fd | target: /proc/self/fd
   |   + dir proc | + ram
   | + arg bash
+  | + arg -c | : ls -l / | cat; ls -l / | cat; ls -l / | cat
   | + env TERM | : screen
   | + env PATH | : /bin
   + route
@@ -157,7 +158,7 @@ set fd [open [run_dir]/genode/focus w]
 puts $fd "focus | label: terminal -> \ | domain: default\n-"
 close $fd
 
-build { lib/ld lib/libc lib/vfs lib/posix test/fork test/execve }
+build { lib/ld lib/libc lib/vfs lib/vfs_pipe lib/posix test/fork test/execve }
 
 build_boot_image [build_artifacts]
 

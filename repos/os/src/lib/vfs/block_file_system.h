@@ -179,19 +179,16 @@ class Vfs_block::Data_file_system : public Single_file_system
 
 		Block_connection &_block;
 
-		class Block_vfs_handle : public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
-				/*
-				 * Noncopyable
-				 */
-				Block_vfs_handle(Block_vfs_handle const &);
-				Block_vfs_handle &operator = (Block_vfs_handle const &);
-
 				friend class Data_file_system;
 
+				Allocator        &_alloc;
 				Block_connection &_block;
+
+				Block::Session::Info const _info;
 
 				struct Size_helper
 				{
@@ -300,7 +297,7 @@ class Vfs_block::Data_file_system : public Single_file_system
 					}
 				};
 
-				Read_handler _read_handler;
+				Read_handler _read_handler { _info };
 
 				struct Write_handler
 				{
@@ -458,7 +455,7 @@ class Vfs_block::Data_file_system : public Single_file_system
 					}
 				};
 
-				Write_handler _write_handler;
+				Write_handler _write_handler { _info };
 
 				struct Sync_handler
 				{
@@ -508,19 +505,14 @@ class Vfs_block::Data_file_system : public Single_file_system
 					}
 				};
 
-				Sync_handler _sync_handler;
+				Sync_handler _sync_handler { _info };
 
 			public:
 
-				Block_vfs_handle(Directory_service &ds,
-				                 Allocator         &alloc,
-				                 Block_connection  &block)
+				File_channel(Allocator &alloc, Attr attr, Block_connection &block)
 				:
-					Single_vfs_handle { ds, alloc, 0 },
-					_block            { block },
-					_read_handler     { _block.info() },
-					_write_handler    { _block.info() },
-					_sync_handler     { _block.info() }
+					Vfs::File_channel(attr),
+					_alloc(alloc), _block(block), _info(_block.info())
 				{ }
 
 				Read_result read(At at, Byte_range_ptr const &dst) override {
@@ -543,6 +535,8 @@ class Vfs_block::Data_file_system : public Single_file_system
 				bool write_ready() const override { return true; }
 
 				Resize_result resize(file_size) override { return Resize_result::OK; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -561,7 +555,7 @@ class Vfs_block::Data_file_system : public Single_file_system
 			/* prevent usage of unsupported block sizes */
 			size_t const block_size = _block.info().block_size;
 			if (block_size % 512 != 0 ||
-			    block_size > sizeof(Block_vfs_handle::Write_handler::_unaligned_buffer)) {
+			    block_size > sizeof(File_channel::Write_handler::_unaligned_buffer)) {
 				error("block-size: ", block_size, " of underlying session not supported");
 				struct Unsupported_underlying_block_size { };
 				throw Unsupported_underlying_block_size();
@@ -570,19 +564,17 @@ class Vfs_block::Data_file_system : public Single_file_system
 
 		~Data_file_system() { }
 
-		Open_result open(char const  *path, unsigned,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc) Block_vfs_handle(*this, alloc, _block);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, _block);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override

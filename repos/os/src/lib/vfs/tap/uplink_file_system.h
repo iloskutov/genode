@@ -28,29 +28,27 @@ namespace Vfs_uplink {
 }
 
 
-class Vfs_uplink::File_system : public Single_file_system
+struct Vfs_uplink::File_system : Single_file_system
 {
-	public:
+	class File_channel;
 
-		class Uplink_vfs_handle;
-
-		using Vfs_handle = Uplink_vfs_handle;
-
-		File_system(Parent_fs &parent_fs, char const *name)
-		:
-			Single_file_system(parent_fs, {
-				.ident = { { "data ", name } },
-				.name  = name,
-				.rwx   = File::RW_TRANSACTIONAL
-			})
-		{ }
+	File_system(Parent_fs &parent_fs, char const *name)
+	:
+		Single_file_system(parent_fs, {
+			.ident = { { "data ", name } },
+			.name  = name,
+			.rwx   = File::RW_TRANSACTIONAL
+		})
+	{ }
 };
 
 
-class Vfs_uplink::File_system::Uplink_vfs_handle : public Single_vfs_handle,
-                                                   public Uplink_client_base
+class Vfs_uplink::File_system::File_channel : public Vfs::File_channel,
+                                              public Uplink_client_base
 {
 	private:
+
+		Allocator &_alloc;
 
 		bool _notifying = false;
 		bool _blocked   = false;
@@ -89,16 +87,16 @@ class Vfs_uplink::File_system::Uplink_vfs_handle : public Single_vfs_handle,
 
 	public:
 
-		Uplink_vfs_handle(Genode::Env            &env,
-		                  Vfs::Env::User         &vfs_user,
-		                  Allocator              &alloc,
-		                  Label            const &label,
-		                  Net::Mac_address const &mac,
-		                  Directory_service      &ds,
-		                  int                     flags)
+		File_channel(Allocator              &alloc,
+		             Attr                    attr,
+		             Genode::Env            &env,
+		             Vfs::Env::User         &vfs_user,
+		             Label            const &label,
+		             Net::Mac_address const &mac)
 		:
-			Single_vfs_handle  { ds, alloc, flags },
-			Uplink_client_base { env, vfs_user, alloc, mac, label }
+			Vfs::File_channel(attr),
+			Uplink_client_base(env, vfs_user, alloc, mac, label),
+			_alloc(alloc)
 		{
 			_drv_handle_link_state(true);
 		}
@@ -128,7 +126,7 @@ class Vfs_uplink::File_system::Uplink_vfs_handle : public Single_vfs_handle,
 
 		bool read_ready() const override
 		{
-			auto &nonconst_this = const_cast<Uplink_vfs_handle &>(*this);
+			auto &nonconst_this = const_cast<File_channel &>(*this);
 			auto &rx = *nonconst_this._conn->rx();
 
 			return _drv_link_state && rx.packet_avail() && rx.ready_to_ack();
@@ -170,7 +168,7 @@ class Vfs_uplink::File_system::Uplink_vfs_handle : public Single_vfs_handle,
 			return out_count;
 		}
 
-		using Write_result = Vfs::Vfs_handle::Write_result;
+		using Write_result = Vfs::File_channel::Write_result;
 
 		Write_result write(At, Const_byte_range_ptr const &src) override
 		{
@@ -190,6 +188,8 @@ class Vfs_uplink::File_system::Uplink_vfs_handle : public Single_vfs_handle,
 			else
 				return Write_error::RETRY;
 		}
+
+		void destruct() override { destroy(_alloc, this); }
 };
 
 #endif /* _SRC__LIB__VFS__TAP__UPLINK_FILE_SYSTEM_H_ */

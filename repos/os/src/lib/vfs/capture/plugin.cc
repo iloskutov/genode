@@ -45,34 +45,39 @@ class Vfs_capture::Data_file_system : public Single_file_system
 
 		unsigned int _open_count { 0 };
 
-		struct Capture_vfs_handle : Single_vfs_handle
+		struct File_channel: Vfs::File_channel
 		{
-			Constructible<Capture::Connection> &_capture;
-			Constructible<Attached_dataspace>  &_capture_ds;
+			Allocator &_alloc;
+			Data_file_system &_fs;
 
 			bool notifying = false;
 			bool blocked   = false;
 
-			Capture_vfs_handle(Constructible<Capture::Connection> &capture,
-			                   Constructible<Attached_dataspace>  &capture_ds,
-			                   Directory_service  &ds,
-			                   Genode::Allocator  &alloc,
-			                   int                 flags)
+			File_channel(Allocator &alloc, Attr attr, Data_file_system &fs)
 			:
-				Single_vfs_handle(ds, alloc, flags),
-				_capture(capture), _capture_ds(capture_ds)
+				Vfs::File_channel(attr), _alloc(alloc), _fs(fs)
 			{ }
+
+			~File_channel()
+			{
+				_fs._open_count--;
+
+				if (_fs._open_count == 0) {
+					_fs._capture_ds.destruct();
+					_fs._capture.destruct();
+				}
+			}
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
 
 			Read_result read(At, Byte_range_ptr const &dst) override
 			{
-				_capture->capture_at(Point(0, 0));
+				_fs._capture->capture_at(Point(0, 0));
 
-				size_t const len = min(dst.num_bytes, _capture_ds->size());
+				size_t const len = min(dst.num_bytes, _fs._capture_ds->size());
 
-				Genode::memcpy(dst.start, _capture_ds->local_addr<char>(), len);
+				Genode::memcpy(dst.start, _fs._capture_ds->local_addr<char>(), len);
 
 				return len;
 			}
@@ -80,12 +85,9 @@ class Vfs_capture::Data_file_system : public Single_file_system
 			void notify_read_ready() override { notifying = true; }
 
 			Resize_result resize(file_size) override { return Resize_result::OK; }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
-
-		using Registered_handle = Genode::Registered<Capture_vfs_handle>;
-		using Handle_registry   = Genode::Registry<Registered_handle>;
-
-		Handle_registry _handle_registry { };
 
 	public:
 
@@ -104,47 +106,28 @@ class Vfs_capture::Data_file_system : public Single_file_system
 
 		static const char *name() { return "data"; }
 
-		Open_result open(char const  *path, unsigned flags,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
 			if (_open_count == 0) {
 				try {
 					_capture.construct(_env, _label.string());
 				} catch (Genode::Service_denied) {
-					return OPEN_ERR_UNACCESSIBLE;
+					return Open_error::DENIED;
 				}
 				_capture->buffer({ .px       = _capture_area,
 				                   .mm       = { },
 				                   .viewport = { { }, _capture_area } });
 				_capture_ds.construct(_env.rm(), _capture->dataspace());
 			}
-
 			try {
-				*out_handle = new (alloc)
-					Registered_handle(_handle_registry,
-					                  _capture, _capture_ds,
-					                  *this, alloc, flags);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, *this);
 			}
-			catch (Genode::Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Genode::Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
-		}
-
-
-		void close(Vfs_handle *handle) override
-		{
-			_open_count--;
-
-			if (_open_count == 0) {
-				_capture_ds.destruct();
-				_capture.destruct();
-			}
-
-			Single_file_system::close(handle);
+			catch (Genode::Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Genode::Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 

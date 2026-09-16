@@ -835,12 +835,12 @@ struct Vfs_oss::Audio : Noncopyable
 			return result;
 		}
 
-		Vfs_handle::Read_result read(Byte_range_ptr const &dst)
+		File_channel::Read_result read(Byte_range_ptr const &dst)
 		{
 			if (!_config.record_enabled)
-				return Vfs_handle::Read_error::DENIED;
+				return File_channel::Read_error::DENIED;
 
-			Vfs_handle::Read_result result = Vfs_handle::Read_error::DENIED;
+			File_channel::Read_result result = File_channel::Read_error::DENIED;
 			_with_input([&] (Stereo_input &input) {
 
 				/* get the ball rolling on first read */
@@ -854,7 +854,7 @@ struct Vfs_oss::Audio : Noncopyable
 
 				unsigned const avail = input.bytes_avail();
 				if (avail < _info.ifrag_size) {
-					result = Vfs_handle::Read_error::RETRY;
+					result = File_channel::Read_error::RETRY;
 					return;
 				}
 
@@ -946,25 +946,25 @@ struct Vfs_oss::Audio : Noncopyable
 			return result;
 		}
 
-		Vfs_handle::Write_result write(Const_byte_range_ptr const &src)
+		File_channel::Write_result write(Const_byte_range_ptr const &src)
 		{
 			auto sample_count = [&] (Const_byte_range_ptr const &range) {
 				return (unsigned)range.num_bytes / _frame_size; };
 
 			unsigned const samples = sample_count(src);
 
-			Vfs_handle::Write_result result = Vfs_handle::Write_error::DENIED;
+			File_channel::Write_result result = File_channel::Write_error::DENIED;
 
 			_with_stereo_output([&] (Stereo_output &output) {
 
 				/* treat a full buffer and enough buffered in the same way */
 				if (!output.space_avail(samples)) {
-					result = Vfs_handle::Write_error::RETRY;
+					result = File_channel::Write_error::RETRY;
 					return;
 				}
 
 				if (output.samples_avail(_config.frags_queued * output.samples_per_channel())) {
-					result = Vfs_handle::Write_error::RETRY;
+					result = File_channel::Write_error::RETRY;
 					return;
 				}
 
@@ -1045,37 +1045,21 @@ class Vfs_oss::Data_file_system : public Single_file_system
 		Vfs::Env::User     &_vfs_user;
 		Audio              &_audio;
 
-		struct Oss_vfs_handle : public Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
-			Audio &_audio;
+			Allocator &_alloc;
+			Audio     &_audio;
 
-			bool _rd_or_rdwr() const
-			{
-				return status_flags() == STATUS_RDONLY
-				    || status_flags() == STATUS_RDWR;
-			}
-
-			bool _wr_or_rdwr() const
-			{
-				return status_flags() == STATUS_WRONLY
-				    || status_flags() == STATUS_RDWR;
-			}
-
-			Oss_vfs_handle(Directory_service &ds,
-			               Allocator &alloc,
-			               Audio &audio,
-			               int flags)
+			File_channel(Allocator &alloc, Attr attr, Audio &audio)
 			:
-				Single_vfs_handle { ds, alloc, flags },
-				_audio { audio }
+				Vfs::File_channel(attr), _alloc(alloc), _audio(audio)
 			{ }
 
-			~Oss_vfs_handle()
+			~File_channel()
 			{
-				if (_rd_or_rdwr())
-					_audio.enable_input(false);
+				_audio.enable_input(false);
 
-				if (_wr_or_rdwr())
+				if (writeable)
 					_audio.enable_output(false);
 			}
 
@@ -1087,17 +1071,12 @@ class Vfs_oss::Data_file_system : public Single_file_system
 
 			Resize_result resize(file_size) override { return Resize_result::OK; }
 
-			bool read_ready() const override {
-				return _audio.read_ready(); }
+			bool read_ready() const override { return _audio.read_ready(); }
 
-			bool write_ready() const override {
-				return _audio.write_ready(); }
+			bool write_ready() const override { return _audio.write_ready(); }
+
+			void destruct() override { destroy(_alloc, this); }
 		};
-
-		using Registered_handle = Registered<Oss_vfs_handle>;
-		using Handle_registry   = Registry<Registered_handle>;
-
-		Handle_registry _handle_registry { };
 
 		Io_signal_handler<Data_file_system> _play_timer {
 			_ep, *this, &Data_file_system::_handle_play_timer };
@@ -1138,21 +1117,17 @@ class Vfs_oss::Data_file_system : public Single_file_system
 			_audio.record_timer_sigh(_record_timer);
 		}
 
-		Open_result open(char const  *path, unsigned flags,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
-			if (!_single_file(path)) {
-				return OPEN_ERR_UNACCESSIBLE;
-			}
+			if (!_single_file(path))
+				return Open_error::DENIED;
 
 			try {
-				*out_handle = new (alloc)
-					Registered_handle(_handle_registry, *this, alloc, _audio, flags);
-				return OPEN_OK;
+				return *new (alloc)
+					File_channel(alloc, { .writeable = attr.writeable }, _audio);
 			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 };
 

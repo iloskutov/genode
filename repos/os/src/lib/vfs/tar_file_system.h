@@ -16,7 +16,6 @@
 
 #include <rom_session/connection.h>
 #include <vfs/file_system.h>
-#include <vfs/vfs_handle.h>
 #include <base/attached_rom_dataspace.h>
 
 namespace Vfs_tar {
@@ -152,37 +151,18 @@ class Vfs_tar::File_system : public Vfs::File_system
 
 	class Node;
 
-	class Tar_vfs_handle : public Vfs_handle
+	struct File_channel : Vfs::File_channel
 	{
-		private:
+		Allocator   &_alloc;
+		File_system &_fs;
 
-			/*
-			 * Noncopyable
-			 */
-			Tar_vfs_handle(Tar_vfs_handle const &);
-			Tar_vfs_handle &operator = (Tar_vfs_handle const &);
+		struct { Node const *_node; };
 
-		protected:
-
-			File_system &_fs;
-
-			Node const *_node;
-
-		public:
-
-			Tar_vfs_handle(File_system &fs, Allocator &alloc, int status_flags,
-			               Node const *node)
-			: Vfs_handle(fs, alloc, status_flags), _fs(fs), _node(node)
-			{ }
-
-			bool read_ready () const override { return true; }
-			bool write_ready() const override { return false; }
-	};
-
-
-	struct Tar_vfs_file_handle : Tar_vfs_handle
-	{
-		using Tar_vfs_handle::Tar_vfs_handle;
+		File_channel(Allocator &alloc, File_system &fs, Node const *node)
+		:
+			Vfs::File_channel({ .writeable = false }),
+			_alloc(alloc), _fs(fs), _node(node)
+		{ }
 
 		Read_result read(At const at, Byte_range_ptr const &dst) override
 		{
@@ -199,6 +179,11 @@ class Vfs_tar::File_system : public Vfs::File_system
 
 			return count;
 		}
+
+		bool read_ready () const override { return true; }
+		bool write_ready() const override { return false; }
+
+		void destruct() override { destroy(_alloc, this); }
 	};
 
 	struct Tar_dir_channel : Vfs::Dir_channel
@@ -673,20 +658,18 @@ class Vfs_tar::File_system : public Vfs::File_system
 			return node != nullptr;
 		}
 
-		Open_result open(char const *path, unsigned, Vfs_handle **out_handle,
-		                 Allocator& alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
+			if (attr.writeable)
+				return Open_error::DENIED;
+
 			Node const *node = dereference(path);
 			if (!node || !node->record || node->record->type() != Record::TYPE_FILE)
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			try {
-				*out_handle = new (alloc)
-					Tar_vfs_file_handle(*this, alloc, 0, node);
-				return OPEN_OK;
-			}
-			catch (Out_of_ram)  { return OPEN_ERR_OUT_OF_RAM; }
-			catch (Out_of_caps) { return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, *this, node); }
+			catch (Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Opendir_result opendir(char const *path, Allocator& alloc) override
@@ -725,15 +708,6 @@ class Vfs_tar::File_system : public Vfs::File_system
 					copy_cstring(dst.start, record.linked_name(), count);
 					return elem;
 				});
-		}
-
-		void close(Vfs_handle *vfs_handle) override
-		{
-			Tar_vfs_handle *tar_handle =
-				static_cast<Tar_vfs_handle *>(vfs_handle);
-
-			if (tar_handle)
-				destroy(vfs_handle->alloc(), tar_handle);
 		}
 
 		static constexpr auto BUILTIN_FS_TYPE = "tar";

@@ -45,16 +45,15 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 
 		genode_socket_handle &_sock;
 
-		struct Vfs_handle : Single_vfs_handle
+		struct File_channel : Vfs::File_channel
 		{
+			Allocator            &_alloc;
 			genode_socket_handle &_sock;
 
-			Vfs_handle(genode_socket_handle      &sock,
-			           Sockopt_value_file_system &fs,
-			           Allocator                &alloc)
+			File_channel(Allocator &alloc, genode_socket_handle &sock)
 			:
-				Single_vfs_handle(fs, alloc, 0),
-				_sock(sock)
+				Vfs::File_channel({ .writeable = !READONLY }),
+				_alloc(alloc), _sock(sock)
 			{ }
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override
@@ -75,7 +74,7 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 
 			Write_result write(At const at, Const_byte_range_ptr const &src) override
 			{
-				if (READONLY || src.num_bytes > BUF_SIZE || at.pos)
+				if (!writeable || src.num_bytes > BUF_SIZE || at.pos)
 					return Write_error::DENIED;
 
 				long opt = 0;
@@ -89,7 +88,7 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 			}
 
 			bool read_ready()  const override { return true; }
-			bool write_ready() const override { return READONLY ? false : true; }
+			bool write_ready() const override { return writeable; }
 
 			Resize_result resize(file_size size) override
 			{
@@ -99,10 +98,7 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 				return Resize_result::OK;
 			}
 
-			private:
-
-				Vfs_handle(Vfs_handle const &);
-				Vfs_handle &operator = (Vfs_handle const &); 
+			void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -125,19 +121,14 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 		 ** Directory-service interface **
 		 *********************************/
 
-		Open_result open(char const *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			try {
-				*out_handle = new (alloc) Vfs_handle(_sock, *this, alloc);
-				return OPEN_OK;
-			}
-			catch (Genode::Out_of_ram)  { Genode::error("out of ram"); return OPEN_ERR_OUT_OF_RAM; }
-			catch (Genode::Out_of_caps) { Genode::error("out of caps");return OPEN_ERR_OUT_OF_CAPS; }
+			try { return *new (alloc) File_channel(alloc, _sock); }
+			catch (Genode::Out_of_ram)  { return Open_error::OUT_OF_RAM; }
+			catch (Genode::Out_of_caps) { return Open_error::OUT_OF_CAPS; }
 		}
 
 		Stat_result stat(char const *path, Stat &out) override
@@ -146,8 +137,6 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 			out.size = BUF_SIZE;
 			return result;
 		}
-
-		using Single_file_system::close;
 };
 
 

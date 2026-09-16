@@ -54,39 +54,27 @@ class Guard
 		Guard(Guard const &);
 		Guard &operator = (Guard const &);
 
-		Genode::Vfs::Vfs_handle * const _handle;
+		Genode::Vfs::File_channel * const _file_channel;
 
 	public:
 
-		Guard(Genode::Vfs::Vfs_handle *handle) : _handle(handle) { }
+		Guard(Genode::Vfs::File_channel *file_channel) : _file_channel(file_channel) { }
 
 		~Guard()
 		{
-			if (_handle)
-				_handle->close();
+			if (_file_channel)
+				_file_channel->destruct();
 		}
 };
 
 
-inline void assert_open(Vfs::Directory_service::Open_result r)
+inline void assert_open(Vfs::Open_error e)
 {
-	using Result = Vfs::Directory_service::Open_result;
-	switch (r) {
-	case Result::OPEN_OK: return;
-	case Result::OPEN_ERR_NAME_TOO_LONG:
-		error("OPEN_ERR_NAME_TOO_LONG"); break;
-	case Result::OPEN_ERR_UNACCESSIBLE:
-		error("OPEN_ERR_UNACCESSIBLE"); break;
-	case Result::OPEN_ERR_NO_SPACE:
-		error("OPEN_ERR_NO_SPACE"); break;
-	case Result::OPEN_ERR_NO_PERM:
-		error("OPEN_ERR_NO_PERM"); break;
-	case Result::OPEN_ERR_EXISTS:
-		error("OPEN_ERR_EXISTS"); break;
-	case Result::OPEN_ERR_OUT_OF_RAM:
-		error("OPEN_ERR_OUT_OF_RAM"); break;
-	case Result::OPEN_ERR_OUT_OF_CAPS:
-		error("OPEN_ERR_OUT_OF_CAPS"); break;
+	switch (e) {
+	case Vfs::Open_error::RETRY:       error("Open_error::RETRY");       break;
+	case Vfs::Open_error::DENIED:      error("Open_error::DENIED");      break;
+	case Vfs::Open_error::OUT_OF_RAM:  error("Open_error::OUT_OF_RAM");  break;
+	case Vfs::Open_error::OUT_OF_CAPS: error("Open_error::OUT_OF_CAPS"); break;
 	}
 	throw Exception();
 }
@@ -103,23 +91,23 @@ inline void assert_mkdir(Vfs::Mkdir_result r)
 	throw Exception();
 }
 
-inline void assert_write(Vfs::Vfs_handle::Write_result r)
+inline void assert_write(Vfs::File_channel::Write_result r)
 {
-	r.with_error([&] (Vfs::Vfs_handle::Write_error e) {
+	r.with_error([&] (Vfs::File_channel::Write_error e) {
 		switch (e) {
-		case Vfs::Vfs_handle::Write_error::RETRY:  error("Vfs::Write_error::RETRY");  break;
-		case Vfs::Vfs_handle::Write_error::DENIED: error("Vfs::Write_error::DENIED"); break;
+		case Vfs::File_channel::Write_error::RETRY:  error("Vfs::Write_error::RETRY");  break;
+		case Vfs::File_channel::Write_error::DENIED: error("Vfs::Write_error::DENIED"); break;
 		}
 		throw Exception();
 	});
 }
 
-inline void assert_read(Vfs::Vfs_handle::Read_result r)
+inline void assert_read(Vfs::File_channel::Read_result r)
 {
-	r.with_error([&] (Vfs::Vfs_handle::Read_error e) {
+	r.with_error([&] (Vfs::File_channel::Read_error e) {
 		switch (e) {
-		case Vfs::Vfs_handle::Read_error::RETRY:  error("Read_error::RETRY");  break;
-		case Vfs::Vfs_handle::Read_error::DENIED: error("Read_error::DENIED"); break;
+		case Vfs::File_channel::Read_error::RETRY:  error("Read_error::RETRY");  break;
+		case Vfs::File_channel::Read_error::DENIED: error("Read_error::DENIED"); break;
 		}
 		throw Exception();
 	});
@@ -233,10 +221,12 @@ struct Populate_test : public Stress_test
 
 		path.append("/c");
 		{
-			Vfs_handle *handle = nullptr;
-			assert_open(vfs.open(
-				path.base(), Directory_service::OPEN_MODE_CREATE, &handle, alloc));
-			Guard guard(handle);
+			File_channel *file_channel = nullptr;
+			vfs.open(path.base(), { .writeable = true, .create = true }, alloc).with_result(
+				[&] (Vfs::File_channel &c) { file_channel = &c; },
+				[&] (Vfs::Open_error e)    { assert_open(e); });
+
+			Guard guard(file_channel);
 			++count;
 		}
 
@@ -298,19 +288,21 @@ struct Write_test : public Stress_test
 
 		path.append("/c");
 		{
-			Vfs_handle *handle = nullptr;
-			assert_open(vfs.open(
-				path.base(), Directory_service::OPEN_MODE_WRONLY, &handle, alloc));
-			Guard guard(handle);
+			File_channel *file_channel = nullptr;
+			vfs.open(path.base(), { .writeable = true, .create = false }, alloc).with_result(
+				[&] (Vfs::File_channel &c) { file_channel = &c; },
+				[&] (Vfs::Open_error e)    { assert_open(e); });
 
-			Vfs_handle::Write_result r = handle->write({ }, Const_byte_range_ptr(path.base(), path_len));
+			Guard guard(file_channel);
+
+			File_channel::Write_result r = file_channel->write({ }, Const_byte_range_ptr(path.base(), path_len));
 			assert_write(r);
 
-			while (handle->sync() == Vfs::Sync_result::RETRY)
+			while (file_channel->sync() == Vfs::Sync_result::RETRY)
 				_io.commit_and_wait();
 
 			count += r.convert<size_t>([&] (size_t n)                { return n; },
-			                           [&] (Vfs_handle::Write_error) { return 0ul; });
+			                           [&] (File_channel::Write_error) { return 0ul; });
 		}
 
 		switch (dir_type) {
@@ -373,20 +365,22 @@ struct Read_test : public Stress_test
 
 		path.append("/c");
 		{
-			Vfs_handle *handle = nullptr;
-			assert_open(vfs.open(
-				path.base(), Directory_service::OPEN_MODE_RDONLY, &handle, alloc));
-			Guard guard(handle);
+			File_channel *file_channel = nullptr;
+			vfs.open(path.base(), { .writeable = false, .create = false }, alloc).with_result(
+				[&] (Vfs::File_channel &c) { file_channel = &c; },
+				[&] (Vfs::Open_error e)    { assert_open(e); });
+
+			Guard guard(file_channel);
 
 			char tmp[MAX_PATH_LEN];
 
-			Vfs::Vfs_handle::Read_result read_result = Vfs::Vfs_handle::Read_error::DENIED;
+			Vfs::File_channel::Read_result read_result = Vfs::File_channel::Read_error::DENIED;
 
 			Byte_range_ptr const dst { tmp, sizeof(tmp) };
 
 			for (;;) {
-				read_result = handle->read({ }, dst);
-				if (read_result != Vfs::Vfs_handle::Read_error::RETRY)
+				read_result = file_channel->read({ }, dst);
+				if (read_result != Vfs::File_channel::Read_error::RETRY)
 					break;
 				_io.commit_and_wait();
 			}
@@ -399,10 +393,10 @@ struct Read_test : public Stress_test
 						error("read returned bad data");
 					count += n;
 				},
-				[&] (Vfs::Vfs_handle::Read_error e) {
+				[&] (Vfs::File_channel::Read_error e) {
 					switch (e) {
-					case Vfs::Vfs_handle::Read_error::RETRY:  error("Read_error::RETRY");  break;
-					case Vfs::Vfs_handle::Read_error::DENIED: error("Read_error::DENIED"); break;
+					case Vfs::File_channel::Read_error::RETRY:  error("Read_error::RETRY");  break;
+					case Vfs::File_channel::Read_error::DENIED: error("Read_error::DENIED"); break;
 					}
 					throw Exception();
 				});

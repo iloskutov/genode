@@ -14,7 +14,6 @@
 
 /* Genode includes */
 #include <base/log.h>
-#include <vfs/vfs_handle.h>
 
 /* libc includes */
 #include <sys/time.h>

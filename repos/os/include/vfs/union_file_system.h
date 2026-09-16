@@ -336,21 +336,23 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			return exists;
 		}
 
-		Open_result open(char const  *path,
-		                 unsigned     mode,
-		                 Vfs_handle **out_handle,
-		                 Allocator   &alloc) override
+		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (_update_in_progress)
 				error("attempt to access file '", path, "' during VFS update");
 
-			Open_result result = OPEN_ERR_UNACCESSIBLE;
-
+			Open_error error = Open_error::DENIED;
+			File_channel *channel_ptr = nullptr;
 			_for_each_fs([&] (Fs &fs) {
-				if (result == OPEN_ERR_UNACCESSIBLE)
-					result = fs.open(path, mode, out_handle, alloc); });
+				if (!channel_ptr && error == Open_error::DENIED)
+					fs.open(path, attr, alloc).with_result(
+						[&] (File_channel &c) { channel_ptr = &c; },
+						[&] (Open_error e)    { error = e; });
+			});
+			if (channel_ptr)
+				return *channel_ptr;
 
-			return result;
+			return error;
 		}
 
 		using Open_composite_dirs_result = Attempt<Ok, Opendir_error>;
@@ -416,12 +418,6 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 			}
 			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
 			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
-		}
-
-		void close(Vfs_handle *handle) override
-		{
-			if (handle && (&handle->ds() == this))
-				destroy(handle->alloc(), handle);
 		}
 
 		Watch_result watch(char const *path) override

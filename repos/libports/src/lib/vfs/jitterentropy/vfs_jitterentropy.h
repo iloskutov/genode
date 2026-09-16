@@ -58,22 +58,23 @@ class Vfs_jitterentropy::File_system : public Single_file_system
 			return true;
 		}
 
-		class Jitterentropy_vfs_handle : public Single_vfs_handle
+		class File_channel : public Vfs::File_channel
 		{
 			private:
 
+				Allocator        &_alloc;
 				struct rand_data *_ec_stir;
 				bool             &_initialized;
 
 			public:
 
-				Jitterentropy_vfs_handle(Directory_service &ds,
-				                         Allocator         &alloc,
-				                         struct rand_data  *ec_stir,
-				                         bool              &initialized)
-				: Single_vfs_handle(ds, alloc, 0),
-				  _ec_stir(ec_stir),
-				  _initialized(initialized) { }
+				File_channel(Allocator         &alloc,
+				             struct rand_data  *ec_stir,
+				             bool              &initialized)
+				:
+					Vfs::File_channel({ .writeable = false }),
+					_alloc(alloc), _ec_stir(ec_stir), _initialized(initialized)
+				{ }
 
 				Read_result read(At, Byte_range_ptr const &dst) override
 				{
@@ -95,6 +96,8 @@ class Vfs_jitterentropy::File_system : public Single_file_system
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return false; }
+
+				void destruct() override { destroy(_alloc, this); }
 		};
 
 	public:
@@ -119,16 +122,12 @@ class Vfs_jitterentropy::File_system : public Single_file_system
 
 		void destruct() override { destroy(_alloc, this); }
 
-		Open_result open(char const *path, unsigned,
-		                 Vfs::Vfs_handle **out_handle,
-		                 Allocator &alloc) override
+		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))
-				return OPEN_ERR_UNACCESSIBLE;
+				return Open_error::DENIED;
 
-			*out_handle = new (alloc)
-				Jitterentropy_vfs_handle(*this, alloc, _ec_stir, _initialized);
-			return OPEN_OK;
+			return *new (alloc) File_channel(alloc, _ec_stir, _initialized);
 		}
 };
 

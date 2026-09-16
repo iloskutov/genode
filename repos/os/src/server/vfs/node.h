@@ -290,17 +290,6 @@ class Vfs_server::Io_node : public Vfs_server::Node_base
 			return _writeable ? _accept() : Submit_result::DENIED;
 		}
 
-		void _execute_mtime(Vfs_handle &vfs_handle)
-		{
-			_packet.with_timestamp([&] (::File_system::Timestamp const time) {
-				Vfs::Timestamp ts { .ms_since_1970 = time.ms_since_1970 };
-				vfs_handle.update_mtime(ts);
-			});
-			_ack_successful_packet(0, _payload_ptr);
-
-			_modified = true;
-		}
-
 		void _execute_mtime(Vfs::File_handle &handle)
 		{
 			bool retry = false;

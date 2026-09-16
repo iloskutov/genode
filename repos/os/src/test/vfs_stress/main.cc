@@ -43,6 +43,31 @@
 
 using namespace Genode;
 
+
+class Guard
+{
+	private:
+
+		/*
+		 * Noncopyable
+		 */
+		Guard(Guard const &);
+		Guard &operator = (Guard const &);
+
+		Genode::Vfs::Vfs_handle * const _handle;
+
+	public:
+
+		Guard(Genode::Vfs::Vfs_handle *handle) : _handle(handle) { }
+
+		~Guard()
+		{
+			if (_handle)
+				_handle->close();
+		}
+};
+
+
 inline void assert_open(Vfs::Directory_service::Open_result r)
 {
 	using Result = Vfs::Directory_service::Open_result;
@@ -211,7 +236,7 @@ struct Populate_test : public Stress_test
 			Vfs_handle *handle = nullptr;
 			assert_open(vfs.open(
 				path.base(), Directory_service::OPEN_MODE_CREATE, &handle, alloc));
-			Vfs_handle::Guard guard(handle);
+			Guard guard(handle);
 			++count;
 		}
 
@@ -276,7 +301,7 @@ struct Write_test : public Stress_test
 			Vfs_handle *handle = nullptr;
 			assert_open(vfs.open(
 				path.base(), Directory_service::OPEN_MODE_WRONLY, &handle, alloc));
-			Vfs_handle::Guard guard(handle);
+			Guard guard(handle);
 
 			Vfs_handle::Write_result r = handle->write({ }, Const_byte_range_ptr(path.base(), path_len));
 			assert_write(r);
@@ -351,7 +376,7 @@ struct Read_test : public Stress_test
 			Vfs_handle *handle = nullptr;
 			assert_open(vfs.open(
 				path.base(), Directory_service::OPEN_MODE_RDONLY, &handle, alloc));
-			Vfs_handle::Guard guard(handle);
+			Guard guard(handle);
 
 			char tmp[MAX_PATH_LEN];
 

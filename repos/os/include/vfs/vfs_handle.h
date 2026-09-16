@@ -58,29 +58,6 @@ class Genode::Vfs::Vfs_handle
 
 	public:
 
-		class Guard
-		{
-			private:
-
-				/*
-				 * Noncopyable
-				 */
-				Guard(Guard const &);
-				Guard &operator = (Guard const &);
-
-				Vfs_handle * const _handle;
-
-			public:
-
-				Guard(Vfs_handle *handle) : _handle(handle) { }
-
-				~Guard()
-				{
-					if (_handle)
-						_handle->close();
-				}
-		};
-
 		enum { STATUS_RDONLY = 0, STATUS_WRONLY = 1, STATUS_RDWR = 2 };
 
 		Vfs_handle(Directory_service &ds,

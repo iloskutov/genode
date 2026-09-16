@@ -1291,7 +1291,7 @@ class Vfs_tresor_trust_anchor::Hashsum_file_system : public Single_file_system
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -1369,7 +1369,7 @@ class Vfs_tresor_trust_anchor::Generate_key_file_system : public Single_file_sys
 				return Read_error::DENIED;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return false; }
@@ -1463,7 +1463,7 @@ class Vfs_tresor_trust_anchor::Encrypt_file_system : public Single_file_system
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -1555,7 +1555,7 @@ class Vfs_tresor_trust_anchor::Decrypt_file_system : public Single_file_system
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -1667,7 +1667,7 @@ class Vfs_tresor_trust_anchor::Initialize_file_system : public Single_file_syste
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }

@@ -54,7 +54,7 @@ struct Vfs_null::File_system : Single_file_system
 		bool read_ready()  const override { return false; }
 		bool write_ready() const override { return true; }
 
-		Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+		Resize_result resize(file_size) override { return Resize_result::OK; }
 	};
 
 	Open_result open(char const  *path, unsigned,

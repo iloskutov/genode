@@ -949,7 +949,7 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 					return result;
 				}
 
-				Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+				Resize_result resize(file_size) override { return Resize_result::OK; }
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
@@ -1079,7 +1079,7 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 					return result;
 				}
 
-				Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+				Resize_result resize(file_size) override { return Resize_result::OK; }
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
@@ -1196,7 +1196,7 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 					return result;
 				}
 
-				Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+				Resize_result resize(file_size) override { return Resize_result::OK; }
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
@@ -1312,7 +1312,7 @@ class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_
 					return result;
 				}
 
-				Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+				Resize_result resize(file_size) override { return Resize_result::OK; }
 
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }

@@ -62,12 +62,12 @@ class Vfs_ip::Error_file_system : public Single_file_system
 			bool read_ready()  const override { return true;  }
 			bool write_ready() const override { return false; }
 
-			Ftruncate_result ftruncate(file_size size) override
+			Resize_result resize(file_size size) override
 			{
 				if (size >= BUF_SIZE)
-					return FTRUNCATE_ERR_NO_SPACE;
+					return Resize_result::DENIED;
 
-				return FTRUNCATE_OK;
+				return Resize_result::OK;
 			}
 
 			private:

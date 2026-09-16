@@ -105,7 +105,7 @@ class Vfs_tresor_crypto::Encrypt_file_system : public Vfs::Single_file_system
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -201,7 +201,7 @@ class Vfs_tresor_crypto::Decrypt_file_system : public Single_file_system
 				return src.num_bytes;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
@@ -744,7 +744,7 @@ class Vfs_tresor_crypto::Management_file_system : public Single_file_system
 				return Write_error::DENIED;
 			}
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }

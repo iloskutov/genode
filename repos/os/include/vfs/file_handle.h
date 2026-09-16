@@ -255,11 +255,10 @@ Genode::Vfs::Resize_result Genode::Vfs::File_handle::resize(file_size num_bytes)
 	return _with_channel(
 		[&] (Channel &channel) {
 			_need_sync = true;
-			switch (channel.ftruncate(num_bytes)) {
-			case Channel::FTRUNCATE_ERR_NO_PERM:
-			case Channel::FTRUNCATE_ERR_NO_SPACE:  return Resize_result::DENIED;
-			case Channel::FTRUNCATE_ERR_INTERRUPT: return Resize_result::RETRY;
-			case Channel::FTRUNCATE_OK:            return Resize_result::OK;
+			switch (channel.resize(num_bytes)) {
+			case Channel::Resize_result::OK:     return Resize_result::OK;
+			case Channel::Resize_result::RETRY:  return Resize_result::RETRY;
+			case Channel::Resize_result::DENIED: break;
 			}
 			return Resize_result::DENIED;
 		},

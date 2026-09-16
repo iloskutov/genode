@@ -1085,7 +1085,7 @@ class Vfs_oss::Data_file_system : public Single_file_system
 			Write_result write(At, Const_byte_range_ptr const &src) override {
 				return _audio.write(src); }
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 
 			bool read_ready() const override {
 				return _audio.read_ready(); }

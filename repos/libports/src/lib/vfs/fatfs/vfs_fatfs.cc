@@ -158,10 +158,10 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				return Write_error::DENIED;
 			}
 
-			Ftruncate_result ftruncate(file_size len) override
+			Resize_result resize(file_size len) override
 			{
-				if (!file)        return FTRUNCATE_ERR_NO_PERM;
-				if (!writeable()) return FTRUNCATE_ERR_NO_PERM;
+				if (!file)        return Resize_result::DENIED;
+				if (!writeable()) return Resize_result::DENIED;
 
 				FIL *fil = &file->fil;
 				FRESULT res = FR_OK;
@@ -169,8 +169,7 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				/* f_lseek will expand a file... */
 				res = f_lseek(fil, len);
 				if (f_tell(fil) != len)
-					return f_size(fil) < len ?
-						FTRUNCATE_ERR_NO_SPACE : FTRUNCATE_ERR_NO_PERM;
+					return Resize_result::DENIED;
 
 				/* ... otherwise truncate will shorten to the seek position */
 				if ((res == FR_OK) && (len < f_size(fil)))
@@ -178,8 +177,7 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 
 				modifying = true;
 
-				return res == FR_OK ?
-					FTRUNCATE_OK : FTRUNCATE_ERR_NO_PERM;
+				return res == FR_OK ? Resize_result::OK : Resize_result::DENIED;
 			}
 
 			bool read_ready() const override { return true; }

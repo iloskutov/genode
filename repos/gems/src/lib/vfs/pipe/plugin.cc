@@ -75,7 +75,7 @@ struct Vfs_pipe::Pipe_handle : Vfs_handle, private Pipe_handle_registry_element
 	Write_result write(At, Const_byte_range_ptr const &) override;
 	Read_result  read(At, Byte_range_ptr const &) override;
 
-	Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_ERR_NO_PERM; }
+	Resize_result resize(file_size) override { return Resize_result::DENIED; }
 
 	bool read_ready()  const override;
 	bool write_ready() const override;

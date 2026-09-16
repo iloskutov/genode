@@ -148,13 +148,13 @@ class Vfs_log::File_system : public Single_file_system
 					return Sync_result::OK;
 				}
 
-				Ftruncate_result ftruncate(file_size) override
+				Resize_result resize(file_size) override
 				{
 					/*
 					 * Return success to allow for output redirection via '> /dev/log'.
 					 * The shell calls ftruncate after opening the destination file.
 					 */
-					return FTRUNCATE_OK;
+					return Resize_result::OK;
 				}
 		};
 

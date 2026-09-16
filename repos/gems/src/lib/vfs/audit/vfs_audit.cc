@@ -151,10 +151,10 @@ class Vfs_audit::File_system : public Vfs::File_system
 				audited.notify_read_ready();
 			}
 
-			Ftruncate_result ftruncate(file_size len) override
+			Resize_result resize(file_size len) override
 			{
 				_log(__func__, " ", path, " ", len);
-				return audited.ftruncate(len);
+				return audited.resize(len);
 			}
 
 			Sync_result sync() override

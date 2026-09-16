@@ -132,18 +132,19 @@ class Vfs_rump::File_system : public Vfs::File_system
 			bool read_ready()  const override { return true; }
 			bool write_ready() const override { return true; }
 
-			Ftruncate_result ftruncate(file_size len)
+			Resize_result resize(file_size len)
 			{
 				if (rump_sys_ftruncate(attr.fd, len) != 0) switch (errno) {
-				case EACCES: return FTRUNCATE_ERR_NO_PERM;
-				case EINTR:  return FTRUNCATE_ERR_INTERRUPT;
-				case ENOSPC: return FTRUNCATE_ERR_NO_SPACE;
 				default:
 					error(__func__, ": unhandled rump error ", errno);
-					return FTRUNCATE_ERR_NO_PERM;
+					[[fallthrough]];
+				case EACCES:
+				case EINTR:
+				case ENOSPC:
+					return Resize_result::DENIED;
 				}
 				modifying = true;
-				return FTRUNCATE_OK;
+				return Resize_result::OK;
 			}
 
 			Read_result read(At const at, Byte_range_ptr const &dst) override

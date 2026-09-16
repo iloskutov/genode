@@ -672,9 +672,9 @@ class Vfs_oss::Data_file_system : public Single_file_system
 				return result;
 			}
 
-			Ftruncate_result ftruncate(file_size) override
+			Resize_result resize(file_size) override
 			{
-				return FTRUNCATE_OK;
+				return Resize_result::OK;
 			}
 
 			bool read_ready() const override

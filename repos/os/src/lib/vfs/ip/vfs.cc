@@ -351,10 +351,10 @@ struct Vfs_ip::Ip_vfs_file_handle final : Vfs_handle
 			_read_ready_waiters_ptr->enqueue(read_ready_elem);
 	}
 
-	Ftruncate_result ftruncate(file_size) override
+	Resize_result resize(file_size) override
 	{
 		/* report ok because libc always executes ftruncate() when opening rw */
-		return FTRUNCATE_OK;
+		return Resize_result::OK;
 	}
 };
 

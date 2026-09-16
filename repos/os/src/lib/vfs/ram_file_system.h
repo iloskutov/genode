@@ -91,7 +91,7 @@ struct Vfs_ram::Io_handle final : Vfs_handle, private List<Io_handle>::Element
 	bool read_ready () const override { return true; }
 	bool write_ready() const override { return true; }
 
-	inline Ftruncate_result ftruncate(file_size) override;
+	inline Resize_result resize(file_size) override;
 	inline Sync_result sync() override;
 	inline Update_mtime_result update_mtime(Timestamp) override;
 };
@@ -873,16 +873,16 @@ Vfs_ram::Vfs_handle::Read_result Vfs_ram::Io_handle::read(At at, Byte_range_ptr 
 }
 
 
-Vfs_ram::Vfs_handle::Ftruncate_result Vfs_ram::Io_handle::ftruncate(file_size len)
+Vfs_ram::Vfs_handle::Resize_result Vfs_ram::Io_handle::resize(file_size len)
 {
 	if (!writeable())
-		return FTRUNCATE_ERR_NO_PERM;
+		return Resize_result::DENIED;
 
 	Seek const at { size_t(len) };
 
 	try { node.truncate(at); }
-	catch (Out_of_memory) { return FTRUNCATE_ERR_NO_SPACE; }
-	return FTRUNCATE_OK;
+	catch (Out_of_memory) { return Resize_result::DENIED; }
+	return Resize_result::OK;
 }
 
 

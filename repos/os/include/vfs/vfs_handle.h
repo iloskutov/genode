@@ -134,10 +134,6 @@ class Genode::Vfs::Vfs_handle
 
 		struct Read_eof : Read_result { Read_eof() : Read_result(0) { }; };
 
-		enum Ftruncate_result { FTRUNCATE_ERR_NO_PERM,  FTRUNCATE_ERR_INTERRUPT,
-		                        FTRUNCATE_ERR_NO_SPACE, FTRUNCATE_OK };
-
-
 		virtual Write_result write(At, Const_byte_range_ptr const &)
 		{
 			return Write_error::DENIED;
@@ -173,10 +169,9 @@ class Genode::Vfs::Vfs_handle
 		 */
 		virtual void notify_read_ready() { }
 
-		virtual Ftruncate_result ftruncate(file_size)
-		{
-			return FTRUNCATE_ERR_NO_PERM;
-		}
+		enum class Resize_result { OK, RETRY, DENIED };
+
+		virtual Resize_result resize(file_size) { return Resize_result::DENIED; }
 
 		/**
 		 * Initiate or complete sync operation

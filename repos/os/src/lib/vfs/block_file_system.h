@@ -542,7 +542,7 @@ class Vfs_block::Data_file_system : public Single_file_system
 				bool read_ready()  const override { return true; }
 				bool write_ready() const override { return true; }
 
-				Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+				Resize_result resize(file_size) override { return Resize_result::OK; }
 		};
 
 	public:

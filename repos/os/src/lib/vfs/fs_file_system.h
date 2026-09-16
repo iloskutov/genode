@@ -533,17 +533,17 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				 */
 			}
 
-			Ftruncate_result ftruncate(file_size len) override
+			Resize_result resize(file_size len) override
 			{
 				try {
 					_fs._fs.truncate(file_handle(), len);
 				}
-				catch (::File_system::Invalid_handle)    { return FTRUNCATE_ERR_NO_PERM; }
-				catch (::File_system::Permission_denied) { return FTRUNCATE_ERR_NO_PERM; }
-				catch (::File_system::No_space)          { return FTRUNCATE_ERR_NO_SPACE; }
-				catch (::File_system::Unavailable)       { return FTRUNCATE_ERR_NO_PERM; }
+				catch (::File_system::Invalid_handle)    { return Resize_result::DENIED; }
+				catch (::File_system::Permission_denied) { return Resize_result::DENIED; }
+				catch (::File_system::No_space)          { return Resize_result::DENIED; }
+				catch (::File_system::Unavailable)       { return Resize_result::DENIED; }
 
-				return FTRUNCATE_OK;
+				return Resize_result::OK;
 			}
 		};
 

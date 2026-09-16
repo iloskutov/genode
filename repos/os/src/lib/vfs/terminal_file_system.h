@@ -158,10 +158,7 @@ class Vfs_terminal::Data_file_system : public Single_file_system
 				return _terminal.write(src.start, src.num_bytes);
 			}
 
-			Ftruncate_result ftruncate(file_size) override
-			{
-				return FTRUNCATE_OK;
-			}
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 		};
 
 		using Registered_handle = Registered<Terminal_vfs_handle>;

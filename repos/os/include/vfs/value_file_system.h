@@ -74,12 +74,12 @@ class Genode::Vfs::Value_file_system : public Single_file_system
 				return len;
 			}
 
-			Ftruncate_result ftruncate(file_size size) override
+			Resize_result resize(file_size size) override
 			{
 				if (size >= BUF_SIZE)
-					return FTRUNCATE_ERR_NO_SPACE;
+					return Resize_result::DENIED;
 
-				return FTRUNCATE_OK;
+				return Resize_result::OK;
 			}
 
 			bool read_ready()  const override { return true; }

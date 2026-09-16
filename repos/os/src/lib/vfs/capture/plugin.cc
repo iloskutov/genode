@@ -79,7 +79,7 @@ class Vfs_capture::Data_file_system : public Single_file_system
 
 			void notify_read_ready() override { notifying = true; }
 
-			Ftruncate_result ftruncate(file_size) override { return FTRUNCATE_OK; }
+			Resize_result resize(file_size) override { return Resize_result::OK; }
 		};
 
 		using Registered_handle = Genode::Registered<Capture_vfs_handle>;

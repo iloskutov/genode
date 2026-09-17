@@ -170,7 +170,7 @@ struct Libc::Interpreter
 
 	Interpreter(Genode::Env &env, char const * const filename)
 	:
-		_rom(env, filename), num_args(_count_args() + 2 /* argv0 + filename */)
+		_rom(env, filename), num_args(_count_args() + 1 /* argv0 */)
 	{
 		if (script()) {
 			args = (char **)calloc(num_args + 1 /* null termination */, sizeof(char *));
@@ -182,9 +182,6 @@ struct Libc::Interpreter
 
 			_for_each_arg([&] (Arg arg) {
 				args[i++] = strndup(arg.ptr, arg.length); });
-
-			/* supply script file name as last argument */
-			args[i++] = strdup(filename);
 		}
 	}
 
@@ -257,9 +254,7 @@ struct Libc::String_array : Noncopyable
 	:
 		_alloc(alloc),
 
-		/* if 'src_array_2' is supplied, we skip its first element (argv0) */
-		count(_num_entries(src_array_1) + _num_entries(src_array_2) -
-		      (src_array_2 ? 1 : 0))
+		count(_num_entries(src_array_1) + _num_entries(src_array_2))
 	{
 		/* marshal array strings to buffer */
 		size_t size = 1024;
@@ -285,7 +280,7 @@ struct Libc::String_array : Noncopyable
 			};
 
 			try_append_entries(src_array_1);
-			try_append_entries(src_array_2, 1); /* skip old argv0 */
+			try_append_entries(src_array_2);
 
 			bool const done = (dst_i == count);
 			if (done) {

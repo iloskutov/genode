@@ -58,8 +58,9 @@ config | verbose: yes
   |     + libc | stdin: /dev/null | stdout: /dev/log | stderr: /dev/log
   |     + vfs
   |       + dir fs  | + fs
-  |       + dir dev | + log
-  |                 | + null
+  |       + dir dev
+  |         + log
+  |         + null
   |       + ram
   |       + import | overwrite: yes
   |         + dir fs
@@ -70,8 +71,9 @@ config | verbose: yes
   |     + libc | stdin: /dev/null | stdout: /dev/log | stderr: /dev/log
   |     + vfs
   |       + dir fs  | + fs
-  |       + dir dev | + log
-  |                 | + null
+  |       + dir dev
+  |         + log
+  |         + null
   |       + ram
   |       + import | overwrite: yes
   |         + dir fs
@@ -82,8 +84,9 @@ config | verbose: yes
   |     + libc | stdin: /dev/null | stdout: /dev/log | stderr: /dev/log | rtc: /dev/null
   |     + vfs
   |       + dir fs  | + fs | writeable: no
-  |       + dir dev | + log
-  |                 | + null
+  |       + dir dev
+  |         + log
+  |         + null
   |     + arg cat | : /fs/link
   + route
     + service File_system                 | + child vfs
@@ -99,4 +102,4 @@ build_boot_image [build_artifacts]
 
 append qemu_args " -nographic "
 
-run_genode_until {Hello world!.{0,7}\n} 30
+run_genode_until {bin/cat\] Hello world!.{0,7}\n} 30

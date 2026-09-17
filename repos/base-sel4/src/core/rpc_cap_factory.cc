@@ -27,34 +27,33 @@ using namespace Core;
 
 Rpc_cap_factory::Alloc_result Rpc_cap_factory::alloc(Native_capability ep)
 {
+	 /*
+	  * Pager code uses create_rpc_obj_cap() with id allocated from
+	  * platform_specific.core_sel_alloc(). Let's start the unique id behind
+	  * them, to avoid double usage and thereby wrong free up.
+	  */
+	static auto unique_id_cnt = platform_specific().max_caps() + 1;
+
 	if (!ep.valid())
 		return Native_capability();
 
 	Mutex::Guard guard(_mutex);
 
-	/*
-	 * Pager code uses create_rpc_obj_cap with a cap_sel as rpc obj key. To
-	 * avoid collision during destruction, use the same allocator.
-	 */
-	auto cap_sel = platform_specific().core_sel_alloc().alloc();
+	Rpc_obj_key const rpc_obj_key(++unique_id_cnt);
 
-	return cap_sel.convert<Rpc_cap_factory::Alloc_result>([&](auto const result) {
-		auto rpc_obj_key = Rpc_obj_key(result);
+	auto cap = Capability_space::create_rpc_obj_cap(ep, rpc_obj_key);
 
-		auto cap = Capability_space::create_rpc_obj_cap(ep, rpc_obj_key);
-
-		try {
-			if (cap.valid()) {
-				_pool.insert(new (_entry_slab) Entry(cap));
-				return Alloc_result(cap);
-			}
+	try {
+		if (cap.valid()) {
+			_pool.insert(new (_entry_slab) Entry(cap));
+			return cap;
 		}
-		catch (Out_of_caps) { return Alloc_result(Alloc_error::OUT_OF_CAPS); }
-		catch (Out_of_ram)  { return Alloc_result(Alloc_error::OUT_OF_RAM);  }
-		catch (Denied)      { return Alloc_result(Alloc_error::DENIED);      }
+	}
+	catch (Out_of_caps) { return Alloc_error::OUT_OF_CAPS; }
+	catch (Out_of_ram)  { return Alloc_error::OUT_OF_RAM;  }
+	catch (Denied)      { return Alloc_error::DENIED;      }
 
-		return Alloc_result( Alloc_error::DENIED );
-	}, [](auto) { return Alloc_result(Alloc_error::DENIED); });
+	return Alloc_error::DENIED;
 }
 
 
@@ -71,12 +70,6 @@ void Rpc_cap_factory::free(Native_capability cap)
 			return;
 
 		_pool.remove(ptr);
-
-		/* revert Rpc_cap_factory::alloc Cap_sel allocation */
-		if (cap.data()) {
-			Cap_sel sel (unsigned(Capability_space::rpc_obj_key(*cap.data()).value()));
-			platform_specific().core_sel_alloc().free(sel);
-		}
 
 		Capability_space::destroy_rpc_obj_cap(cap);
 

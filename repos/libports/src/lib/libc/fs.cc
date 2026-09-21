@@ -1727,7 +1727,7 @@ ssize_t Libc::Fs::readlink(const char *link_path, char *buf, ::size_t buf_size)
 
 		result.with_result(
 			[&] (Vfs::Path_elem const path_elem) {
-				out_count = ::strlen(buf) + 1;
+				out_count = ::strlen(buf);
 				if (path_elem.last(Span::from_cstring(link_path)))
 					succeeded = true;
 				else

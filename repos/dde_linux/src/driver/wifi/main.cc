@@ -21,8 +21,8 @@
 #include <os/reporter.h>
 #include <timer_session/connection.h>
 
-/* wifi library includes */
-#include <wifi/firmware.h>
+/* DDE Linux includes */
+#include <lx_kit/firmware.h>
 
 /* local includes */
 #include "util.h"
@@ -47,14 +47,14 @@ struct Main
 	Constructible<Wpa_thread>    _wpa;
 	Constructible<Wifi::Manager> _manager;
 
-	struct Request_handler : Wifi::Firmware_request_handler
+	struct Request_handler : Lx_kit::Firmware_request_handler
 	{
 		Signal_handler<Request_handler> _handler;
 
 		void _handle_request()
 		{
 			using Fw_path = Genode::String<128>;
-			using namespace Wifi;
+			using namespace Lx_kit;
 
 			Firmware_request *request_ptr = firmware_get_request();
 			if (!request_ptr)
@@ -119,7 +119,7 @@ struct Main
 		_manager.construct(env);
 
 		Wifi::rfkill_establish_handler(*_manager);
-		Wifi::firmware_establish_handler(_request_handler);
+		Lx_kit::firmware_establish_handler(_request_handler);
 
 		Wifi::ctrl_init(_manager->msg_buffer());
 		_wpa.construct(env, _wpa_startup_blockade);

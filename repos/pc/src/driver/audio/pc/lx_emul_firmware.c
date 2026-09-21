@@ -13,6 +13,7 @@
 
 /* lx emul/kit includes */
 #include <lx_emul.h>
+#include <lx_emul/firmware.h>
 
 /* Linux includes */
 #include <linux/version.h>
@@ -26,11 +27,6 @@ struct firmware_work {
 	void *context;
 	void (*cont)(struct firmware const *, void *);
 };
-
-
-extern int lx_emul_request_firmware_nowait(const char *name, void *dest,
-                                           size_t *result, bool warn);
-extern void lx_emul_release_firmware(void const *data, size_t size);
 
 
 static void request_firmware_work_func(struct work_struct *work)

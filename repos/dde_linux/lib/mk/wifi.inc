@@ -23,7 +23,7 @@ SHARED_LIB := yes
 
 LIBS += base jitterentropy
 
-SRC_CC  += firmware.cc
+SRC_CC  += lx_kit/firmware.cc
 SRC_CC  += socket_call.cc
 SRC_CC  += wlan.cc
 

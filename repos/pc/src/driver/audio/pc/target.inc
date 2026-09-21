@@ -11,7 +11,7 @@ INC_DIR += $(LX_SRC_DIR)/sound/hda/common
 INC_DIR += $(LX_SRC_DIR)/sound/hda/controllers
 
 SRC_CC += audio.cc
-SRC_CC += firmware.cc
+SRC_CC += lx_kit/firmware.cc
 SRC_CC += main.cc
 SRC_CC += misc.cc
 SRC_C  += $(notdir $(wildcard $(REL_PRG_DIR)/generated_dummies.c))

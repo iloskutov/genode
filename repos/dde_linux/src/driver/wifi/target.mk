@@ -9,4 +9,7 @@ LIBS    += libcrypto1 libssl1 wpa_driver_nl80211
 
 INC_DIR += $(PRG_DIR)
 
+# get access to <lx_kit/firmware.h>
+INC_DIR += $(REP_DIR)/src/include
+
 CC_CXX_WARN_STRICT :=

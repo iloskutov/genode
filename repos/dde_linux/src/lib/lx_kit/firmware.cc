@@ -16,10 +16,8 @@
 
 /* lx emul/kit includes */
 #include <lx_kit/env.h>
+#include <lx_kit/firmware.h>
 #include <lx_emul/task.h>
-
-/* local includes */
-#include "firmware.h"
 
 using namespace Genode;
 

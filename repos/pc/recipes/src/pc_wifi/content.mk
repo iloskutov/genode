@@ -41,7 +41,8 @@ MIRROR_FROM_WS_PORT_DIR    := $(shell cd $(WS_PORT_DIR); find src/app/wpa_suppli
 MIRROR_FROM_LIBNL_PORT_DIR := $(shell cd $(LIBNL_PORT_DIR); find src/lib/libnl -type f)
 
 content: $(MIRROR_FROM_REP_DIR) $(MIRROR_FROM_OS_DIR) $(MIRROR_FROM_DDE_LINUX_DIR) \
-         $(MIRROR_FROM_WS_PORT_DIR) $(MIRROR_FROM_LIBNL_PORT_DIR) cleanup-wpa
+         $(MIRROR_FROM_WS_PORT_DIR) $(MIRROR_FROM_LIBNL_PORT_DIR) cleanup-wpa \
+         lx_kit_firmware_header
 
 $(MIRROR_FROM_REP_DIR):
 	$(mirror_from_rep_dir)
@@ -65,6 +66,16 @@ $(MIRROR_FROM_LIBNL_PORT_DIR):
 cleanup-wpa: $(MIRROR_FROM_WS_PORT_DIR)
 	@for dir in hs20; do \
 		rm -rf src/app/wpa_supplicant/$$dir; done
+
+lx_kit_firmware_header: $(MIRROR_FROM_DDE_LINUX_DIR)
+	#
+	# The driver binary does not depend on PC Linux and we would
+	# like to keep it that way. So copy the header file in place
+	# to get picked up via $(PRG_DIR).
+	#
+	mkdir -p src/driver/wifi/lx_kit
+	cp $(GENODE_DIR)/repos/dde_linux/src/include/lx_kit/firmware.h \
+		src/driver/wifi/lx_kit
 
 content: LICENSE
 LICENSE:

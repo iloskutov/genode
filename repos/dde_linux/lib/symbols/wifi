@@ -19,8 +19,9 @@ jiffies_64 D 0
 socket_call B 1
 wifi_ifindex T
 wifi_ifname T
-_ZN4Wifi20firmware_get_requestEv T
-_ZN4Wifi26firmware_establish_handlerERNS_24Firmware_request_handlerE T
+_ZN6Lx_kit20firmware_get_requestEv T
+_ZN6Lx_kit26firmware_establish_handlerERNS_24Firmware_request_handlerE T
+
 _ZN4Wifi10set_rfkillEb T
 _ZN4Wifi13rfkill_notifyEv T
 _ZN4Wifi14rfkill_blockedEv T

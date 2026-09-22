@@ -103,8 +103,6 @@ class Genode::List_model : Noncopyable
 				ELEM const *next() const { return List<ELEM>::Element::next(); }
 		};
 
-		struct Unknown_element_type : Exception { };
-
 		~List_model()
 		{
 			if (_elements.first())

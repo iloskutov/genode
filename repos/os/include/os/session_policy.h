@@ -23,13 +23,9 @@ namespace Genode {
 
 	struct Node_label_score;
 
-	using Xml_node_label_score = Node_label_score;
-
 	template <size_t N>
 	auto with_matching_policy(String<N> const &, auto const &, auto const &,
 	                          auto const &no_match_fn) -> decltype(no_match_fn());
-
-	class  Session_policy;
 }
 
 
@@ -198,70 +194,5 @@ auto Genode::with_matching_policy(String<N> const &label,
 		[&] (auto const &policy) { return match_fn(policy); },
 		[&]                      { return no_match_fn(); });
 }
-
-
-/**
- * Query server-side policy for a session request
- */
-class Genode::Session_policy : public Xml_node
-{
-	public:
-
-		/**
-		 * Exception type
-		 */
-		class No_policy_defined : public Service_denied { };
-
-	private:
-
-		/**
-		 * Query session policy from session label
-		 */
-		template <size_t N>
-		static Const_byte_range_ptr _query_policy(String<N> const &label, Xml_node const &config)
-		{
-			char const *start_ptr = "<none/>";
-			size_t      num_bytes = 7;
-
-			with_matching_policy(label, config,
-
-				[&] (Xml_node const &policy) {
-					policy.with_raw_node([&] (char const *ptr, size_t len) {
-						start_ptr = ptr;
-						num_bytes = len; });
-				},
-
-				[&] () {
-					warning("no policy defined for label '", label, "'");
-					throw No_policy_defined(); });
-
-			return { start_ptr, num_bytes };
-		}
-
-	public:
-
-		/**
-		 * Constructor
-		 *
-		 * \param label   label used as the selector of a policy
-		 * \param config  XML node that contains the policies as sub nodes
-		 *
-		 * \throw No_policy_defined  the server configuration has no
-		 *                           policy defined for the specified label
-		 *
-		 * On construction, the 'Session_policy' looks up the 'policy' XML node
-		 * that matches the label provided as argument. The server-side
-		 * policies are defined in one or more policy subnodes of the server's
-		 * 'config' node. Each policy node has a label attribute. If the policy
-		 * label matches the first part of the label as delivered as session
-		 * argument, the policy matches. If multiple policies match, the one
-		 * with the longest label is selected.
-		 */
-		template <size_t N>
-		Session_policy(String<N> const &label, Xml_node const &config)
-		:
-			Xml_node(_query_policy(label, config))
-		{ }
-};
 
 #endif /* _INCLUDE__OS__SESSION_POLICY_H_ */

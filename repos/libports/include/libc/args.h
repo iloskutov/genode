@@ -29,7 +29,7 @@ static void populate_args_and_env(Libc::Env &env, int &argc, char **&argv, char 
 	{
 		bool found = false;
 		node.for_each_attribute([&] (Node::Attribute const &attr) {
-			if (!found && attr.name == attr_name) {
+			if (!found && attr.tag.equals(Span::from_cstring(attr_name))) {
 				fn(attr.value.start, attr.value.num_bytes);
 				found = true;
 			}

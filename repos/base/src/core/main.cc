@@ -65,9 +65,6 @@ Genode::Trace::Logger * Genode::Thread::_logger() { return nullptr; }
 Genode::Trace::Logger::Logger() { }
 
 
-bool Genode::Generator::_generate_xml() { return true; }
-
-
 struct Genode::Runtime { };
 
 

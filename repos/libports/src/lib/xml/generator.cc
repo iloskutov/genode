@@ -12,7 +12,8 @@
  */
 
 /* Genode includes */
-#include <util/xml_generator.h>
+#include <xml/generator.h>
+#include <xml/node.h>
 
 using namespace Genode;
 
@@ -89,8 +90,6 @@ Xml_generator::Node::Node(Xml_generator &xml, char const *name, bool,
 	_exceeded |= _out_buffer.append('\0').exceeded;
 }
 
-
-#include <util/xml_node.h>
 
 void Xml_generator::node_attributes(Xml_node const &node)
 {

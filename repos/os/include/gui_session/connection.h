@@ -77,20 +77,6 @@ class Gui::Connection : private Genode::Connection<Session>
 			fn(*_info_rom);
 		}
 
-		void _with_info_xml(auto const &fn)
-		{
-			_with_info_rom([&] (Rom_session_client &rom) {
-				if (!_info_ds.constructed() || rom.update() == false)
-					_info_ds.construct(_env.rm(), rom.dataspace());
-
-				try {
-					Xml_node xml(_info_ds->local_addr<char>(), _info_ds->size());
-					fn(xml); }
-				catch (Xml_node::Invalid_syntax) {
-					warning("Gui::info has invalid XML syntax"); }
-			});
-		}
-
 		void _with_info_node(auto const &fn)
 		{
 			_with_info_rom([&] (Rom_session_client &rom) {
@@ -249,16 +235,9 @@ class Gui::Connection : private Genode::Connection<Session>
 		}
 
 		/**
-		 * Call 'fn' with mode information as 'Xml_node const &' argument
-		 */
-		void with_info_xml(auto const &fn) { _with_info_xml(fn); }
-
-		/**
 		 * Call 'fn' with mode information as 'Node const &' argument
 		 */
 		void with_info_node(auto const &fn) { _with_info_node(fn); }
-
-		void with_info(auto const &fn) { with_info_xml(fn); }
 
 		Capability<Rom_session> info_rom_cap()
 		{

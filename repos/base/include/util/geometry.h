@@ -72,14 +72,6 @@ struct Genode::Point
 		return Point(node.attribute_value("xpos", CT{}),
 		             node.attribute_value("ypos", CT{}));
 	}
-
-	/**
-	 * API-compatibility wrapper for 'from_node'
-	 *
-	 * \noapi
-	 * \deprecated
-	 */
-	static Point from_xml(Xml_node const &node) { return from_node(node); };
 };
 
 
@@ -118,14 +110,6 @@ struct Genode::Area
 		return Area(node.attribute_value("width",  DT{}),
 		            node.attribute_value("height", DT{}));
 	}
-
-	/**
-	 * API-compatibility wrapper for 'from_node'
-	 *
-	 * \noapi
-	 * \deprecated
-	 */
-	static Area from_xml(Xml_node const &node) { return from_node(node); }
 };
 
 
@@ -280,14 +264,6 @@ struct Genode::Rect
 	{
 		return Rect(Point::from_node(node), Area::from_node(node));
 	}
-
-	/**
-	 * API-compatibility wrapper for 'from_node'
-	 *
-	 * \noapi
-	 * \deprecated
-	 */
-	static Rect from_xml(Xml_node const &node) { return from_node(node); }
 };
 
 #endif /* _INCLUDE__UTIL__GEOMETRY_H_ */

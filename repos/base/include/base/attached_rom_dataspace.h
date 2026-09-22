@@ -121,23 +121,6 @@ class Genode::Attached_rom_dataspace
 		bool valid() const { return _ds.constructed(); }
 
 		/**
-		 * Return dataspace content as XML node
-		 *
-		 * This method always returns a valid XML node. It never throws an
-		 * exception. If the dataspace is invalid or does not contain properly
-		 * formatted XML, the returned XML node has the form "<empty/>".
-		 */
-		Xml_node xml() const
-		{
-			try {
-				if (valid() && local_addr<void const>())
-					return Xml_node(local_addr<char>(), size());
-			} catch (Xml_node::Invalid_syntax) { }
-
-			return Xml_node("<empty/>");
-		}
-
-		/**
 		 * Return dataspace content as node
 		 *
 		 * This method always returns a valid node. If the dataspace is invalid

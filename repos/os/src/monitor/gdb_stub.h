@@ -19,6 +19,7 @@
 #include <gdb_command.h>
 #include <gdb_response.h>
 #include <gdb_arch.h>
+#include <xml/generator.h>
 
 namespace Monitor { namespace Gdb { struct State; } }
 

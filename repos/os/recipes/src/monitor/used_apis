@@ -1,6 +1,7 @@
 base
 sandbox
 os
+xml
 monitor
 report_session
 timer_session

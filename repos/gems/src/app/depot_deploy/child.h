@@ -547,8 +547,9 @@ void Depot_deploy::Child::_gen_start_node(Generator         &g,
 							g.node(node_type.string(), [&] {
 								conn.for_each_attribute([&] (Node::Attribute const &a) {
 									/* "service" nodes are deprecated */
-									if (conn.type() != "service" || a.name != "name")
-										g.attribute(a.name.string(),
+									Generator::Tag_name const tag { a.tag };
+									if (conn.type() != "service" || tag != "name")
+										g.attribute(tag.string(),
 										            a.value.start,
 										            a.value.num_bytes); }); }); });
 					});

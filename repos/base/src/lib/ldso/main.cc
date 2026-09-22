@@ -790,12 +790,6 @@ void *Dynamic_linker::_respawn(Env &env, char const *binary, char const *entry_n
 }
 
 
-static bool generate_xml;
-
-
-bool Genode::Generator::_generate_xml() { return generate_xml; }
-
-
 extern "C" void wait_for_continue();
 
 
@@ -804,8 +798,7 @@ void Component::construct(Genode::Env &env)
 	/* read configuration */
 	Config const config(env);
 
-	verbose      = config.verbose;
-	generate_xml = config.generate_xml;
+	verbose = config.verbose;
 
 	parent_ptr = &env.parent();
 

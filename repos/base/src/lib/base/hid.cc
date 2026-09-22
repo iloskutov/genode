@@ -31,7 +31,38 @@ namespace {
 }
 
 
-void Hid_node::_for_each_sub_node(Span const &bytes, With_indent_span::Ft const &fn)
+Node::Match Node::_search(auto const &cond_fn) const
+{
+	char const *start     { };
+	size_t      num_bytes { };
+	Indent      indent    { };
+
+	for_each_sub_node([&] (Node const &node) {
+		if (!start && cond_fn(node)) {
+			indent    = node._indent;
+			start     = node._bytes.start;
+			num_bytes = node._bytes.num_bytes;
+		}
+	});
+
+	return { indent, { start, num_bytes } };
+}
+
+
+Node::Match Node::_search_by_type(char const *type) const
+{
+	return _search([&] (Node const &node) { return node.type() == type; });
+}
+
+
+Node::Match Node::_search_by_index(unsigned n) const
+{
+	unsigned i = 0;
+	return _search([&] (Node const &) { return i++ == n; });
+}
+
+
+void Node::_for_each_sub_node(Span const &bytes, With_indent_span::Ft const &fn)
 {
 	struct Node
 	{
@@ -75,7 +106,14 @@ void Hid_node::_for_each_sub_node(Span const &bytes, With_indent_span::Ft const 
 }
 
 
-void Genode::Hid_node::_for_each_attr(Span const &bytes, auto const &fn)
+bool Node::has_sub_node(char const *type) const
+{
+	return with_sub_node(type, [&] (Node const &) { return true;  },
+	                           [&]                { return false; });
+}
+
+
+void Node::_for_each_attr(Span const &bytes, auto const &fn)
 {
 	auto with_tag_value = [] (Span const &s, auto const &fn)
 	{
@@ -120,7 +158,7 @@ void Genode::Hid_node::_for_each_attr(Span const &bytes, auto const &fn)
 }
 
 
-void Genode::Hid_node::_for_each_attribute(With_attribute::Ft const &fn) const
+void Node::_for_each_attribute(With_attribute::Ft const &fn) const
 {
 	_for_each_attr(_bytes, [&] (Span const &tag, Span const &value) {
 		fn(Attribute { .tag   = { tag  .start, tag  .num_bytes },
@@ -128,7 +166,17 @@ void Genode::Hid_node::_for_each_attribute(With_attribute::Ft const &fn) const
 }
 
 
-void Hid_node::_with_tag_value(char const *type, With_tag_value::Ft const &fn) const
+bool Node::has_attribute(char const *type) const
+{
+	bool result = false;
+	size_t const type_len = strlen(type);
+	_for_each_attr(_bytes, [&] (Span const &tag, Span const &) {
+		if (!result && tag.equals({ type, type_len })) result = true; });
+	return result;
+}
+
+
+void Node::_with_tag_value(char const *type, With_tag_value::Ft const &fn) const
 {
 	size_t const type_len = strlen(type);
 
@@ -140,10 +188,21 @@ void Hid_node::_with_tag_value(char const *type, With_tag_value::Ft const &fn) c
 }
 
 
+static Span skipped_whitespace(Span const &bytes)
+{
+	char const *s = bytes.start;
+	size_t      n = bytes.num_bytes;
+
+	for (; n && is_whitespace(*s); n--, s++);
+
+	return { s, n };
+}
+
+
 /**
  * Validate presence of node type and end marker for top-level node
  */
-Const_byte_range_ptr Hid_node::_validated(Const_byte_range_ptr const &bytes)
+Const_byte_range_ptr Node::_validated(Const_byte_range_ptr const &bytes)
 {
 	bool valid = false;
 	_with_type(bytes, [&] (Span const &t) { valid = (t.num_bytes > 0); });
@@ -182,19 +241,27 @@ Const_byte_range_ptr Hid_node::_validated(Const_byte_range_ptr const &bytes)
 }
 
 
-Hid_node::Hid_node(Const_byte_range_ptr const &bytes) : _bytes(_validated(bytes)) { }
+void Node::Quoted_content::print(Output &out) const
+{
+	_node.for_each_quoted_line([&] (auto const &line) {
+		line.print(out);
+		if (!line.last) out.out_char('\n'); });
+}
 
 
-/*******************
- ** Hid_generator **
- *******************/
+Node::Node(Span const &bytes) : _bytes(_validated(skipped_whitespace(bytes))) { }
+
+
+/***************
+ ** Generator **
+ ***************/
 
 /**
- * Meta data for the formatted output of 'Hid_generator::tabular'
+ * Meta data for the formatted output of 'Generator::tabular'
  */
-struct Hid_generator::Tabular : Noncopyable
+struct Generator::Tabular : Noncopyable
 {
-	Hid_generator &_g;
+	Generator &_g;
 
 	/*
 	 * The functor argument of 'tabular()' is evaluated twice. The first
@@ -324,7 +391,7 @@ struct Hid_generator::Tabular : Noncopyable
 
 	size_t const _leading_anchor_spaces = max(2*anchor_indent.level, 2u) - 2;
 
-	Tabular(Hid_generator &g) : _g(g) { _g._tabular_ptr = this; }
+	Tabular(Generator &g) : _g(g) { _g._tabular_ptr = this; }
 
 	~Tabular() { /* C++ exception during 'fn' */ _g._tabular_ptr = nullptr; }
 
@@ -399,7 +466,7 @@ struct Hid_generator::Tabular : Noncopyable
 };
 
 
-void Hid_generator::_attribute(char const *tag, char const *value, size_t val_len)
+void Generator::_attribute(char const *tag, char const *value, size_t val_len)
 {
 	/* deny non-printable and delimiting characters in attribute values */
 	auto blessed = [] (char c) { return (c & 0xe0) && (c != '|'); };
@@ -473,7 +540,7 @@ void Hid_generator::_attribute(char const *tag, char const *value, size_t val_le
 }
 
 
-void Hid_generator::_print_node_type(Span const &name)
+void Generator::_print_node_type(Span const &name)
 {
 	Cstring const name_str { name.start, name.num_bytes };
 	if (_node_state.indent.level == 0) {
@@ -525,9 +592,7 @@ void Hid_generator::_print_node_type(Span const &name)
 }
 
 
-#include <util/xml_node.h>
-
-void Hid_generator::_node(char const *name, Node_fn::Ft const &fn)
+void Generator::_node(char const *name, Node_fn::Ft const &fn)
 {
 	_print_node_type({ name, strlen(name) });
 
@@ -545,7 +610,7 @@ void Hid_generator::_node(char const *name, Node_fn::Ft const &fn)
 
 		struct Guard
 		{
-			Hid_generator &g; Orig orig; bool ok;
+			Generator &g; Orig orig; bool ok;
 
 			~Guard()
 			{
@@ -564,7 +629,7 @@ void Hid_generator::_node(char const *name, Node_fn::Ft const &fn)
 }
 
 
-void Hid_generator::_tabular(Node_fn::Ft const &fn)
+void Generator::_tabular(Node_fn::Ft const &fn)
 {
 	/* squash nested tabular scopes into one */
 	if (_tabular_ptr) {
@@ -586,7 +651,7 @@ void Hid_generator::_tabular(Node_fn::Ft const &fn)
 }
 
 
-void Hid_generator::_copy(Hid_node const &node)
+void Generator::_copy(Node const &node)
 {
 	if (_tabular_ptr && _tabular_ptr->phase == Tabular::Phase::GATHER_LAYOUT)
 		return;
@@ -617,7 +682,7 @@ void Hid_generator::_copy(Hid_node const &node)
 }
 
 
-void Hid_generator::_start_quoted_line()
+void Generator::_start_quoted_line()
 {
 	Node_state::Quote &quote = _node_state.quote;
 
@@ -640,7 +705,7 @@ void Hid_generator::_start_quoted_line()
 }
 
 
-void Hid_generator::_append_quoted(Span const &s)
+void Generator::_append_quoted(Span const &s)
 {
 	/* suppress printing in table-layout gathering phase */
 	if (_tabular_ptr && _tabular_ptr->phase == Tabular::Phase::GATHER_LAYOUT)
@@ -666,12 +731,4 @@ void Hid_generator::_append_quoted(Span const &s)
 		}
 		first = false;
 	});
-}
-
-
-void Hid_generator::node_attributes(Xml_node const &node)
-{
-	node.for_each_attribute([&] (auto const &attr) {
-		attr.with_raw_value([&] (char const *start, size_t num_bytes) {
-			attribute(attr.name().string(), start, num_bytes); }); });
 }

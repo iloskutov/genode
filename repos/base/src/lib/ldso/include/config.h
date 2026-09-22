@@ -31,9 +31,8 @@ class Linker::Config : Noncopyable
 		Bind const bind = _config.node().attribute_value("ld_bind_now", false)
 		                ? BIND_NOW : BIND_LAZY;
 
-		bool const verbose      = _config.node().attribute_value("ld_verbose",     false);
-		bool const check_ctors  = _config.node().attribute_value("ld_check_ctors", true);
-		bool const generate_xml = _config.node().attribute_value("generate_xml",   false);
+		bool const verbose     = _config.node().attribute_value("ld_verbose",     false);
+		bool const check_ctors = _config.node().attribute_value("ld_check_ctors", true);
 
 		Config(Env &env) : _config(env, "config") { }
 

@@ -243,7 +243,7 @@ class Timer::Hpet_device : Noncopyable, public Timer::Device
 
 	public:
 
-		Hpet_device(Env &env, Wakeup_dispatcher &dispatcher, Xml_node const &config)
+		Hpet_device(Env &env, Wakeup_dispatcher &dispatcher, Node const &config)
 		:
 			_env(env), _dispatcher(dispatcher),
 			_io_mem(_env, config.attribute_value("mmio", 0xfed00000ul), 4096)
@@ -365,7 +365,7 @@ struct Timer::Main : Hpet_device::Wakeup_dispatcher
 
 	Attached_rom_dataspace _config { _env, "config" };
 
-	Hpet_device _device { _env, *this, _config.xml() };
+	Hpet_device _device { _env, *this, _config.node() };
 
 	Mutex  _alarms_mutex { };
 	

@@ -93,14 +93,6 @@ class Genode::Affinity
 					return Affinity::Space(node.attribute_value("width",  0U),
 					                       node.attribute_value("height", 0U));
 				}
-
-				/**
-				 * API-compatibility wrapper for 'from_node'
-				 *
-				 * \noapi
-				 * \deprecated
-				 */
-				static Space from_xml(Xml_node const &node) { return from_node(node); }
 		};
 
 
@@ -173,14 +165,6 @@ class Genode::Affinity
 					                node.attribute_value("width",  default_width),
 					                node.attribute_value("height", default_height));
 				}
-
-				/**
-				 * API-compatibility wrapper for 'from_node'
-				 *
-				 * \noapi
-				 * \deprecated
-				 */
-				static Location from_xml(auto &&... args) { return from_node(args...); }
 		};
 
 	private:
@@ -213,14 +197,6 @@ class Genode::Affinity
 
 			return Affinity(space, location);
 		}
-
-		/**
-		 * API-compatibility wrapper for 'from_node'
-		 *
-		 * \noapi
-		 * \deprecated
-		 */
-		static Affinity from_xml(Xml_node const &node) { return from_node(node); }
 
 		static Affinity unrestricted()
 		{

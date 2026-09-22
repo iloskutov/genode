@@ -39,7 +39,6 @@ namespace Genode {
 	template <typename>
 	class  Watch_handler;
 	void with_raw_file_content (Readonly_file const &, Byte_range_ptr const &, auto const &);
-	void with_xml_file_content (Readonly_file const &, Byte_range_ptr const &, auto const &);
 	void with_node_file_content(Readonly_file const &, Byte_range_ptr const &, auto const &);
 }
 
@@ -551,28 +550,6 @@ void Genode::with_raw_file_content(Readonly_file const &file,
 }
 
 
-/**
- * Call functor 'fn' with content as 'Xml_node' argument
- *
- * If the file does not contain valid XML, 'fn' is called with an
- * '<empty/>' node as argument.
- */
-void Genode::with_xml_file_content(Readonly_file const &file,
-                                   Byte_range_ptr const &range, auto const &fn)
-{
-	with_raw_file_content(file, range, [&] (char const *ptr, size_t num_bytes) {
-
-		try {
-			fn(Xml_node(ptr, num_bytes));
-			return;
-		}
-		catch (Xml_node::Invalid_syntax) { }
-
-		fn(Xml_node("<empty/>"));
-	});
-}
-
-
 void Genode::with_node_file_content(Readonly_file const &file,
                                     Byte_range_ptr const &range, auto const &fn)
 {
@@ -640,25 +617,6 @@ class Genode::File_content
 			with_raw_file_content(Readonly_file(dir, rel_path),
 			                      Byte_range_ptr(_buffer.ptr, _buffer.size),
 			                      [] (char const*, size_t) { });
-		}
-
-		/**
-		 * Call functor 'fn' with content as 'Xml_node' argument
-		 *
-		 * If the file does not contain valid XML, 'fn' is called with an
-		 * '<empty/>' node as argument.
-		 */
-		void xml(auto const &fn) const
-		{
-			try {
-				if (_buffer.size) {
-					fn(Xml_node(_buffer.ptr, _buffer.size));
-					return;
-				}
-			}
-			catch (Xml_node::Invalid_syntax) { }
-
-			fn(Xml_node("<empty/>"));
 		}
 
 		void node(auto const &fn) const

@@ -13,7 +13,7 @@
  */
 
 /* Genode includes */
-#include <util/xml_node.h>
+#include <xml/node.h>
 #include <base/attached_ram_dataspace.h>
 #include <base/component.h>
 #include <base/log.h>

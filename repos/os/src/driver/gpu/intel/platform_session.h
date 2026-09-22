@@ -294,9 +294,7 @@ class Platform::Session_component : public Rpc_object<Session>,
 
 			Node const rom_node(Const_byte_range_ptr(rom.local_addr<char>(),
 			                                         rom.size()));
-
-			copy_attributes(g, rom_node);
-
+			g.node_attributes(rom_node);
 			rom_node.for_each_sub_node("device", [&](auto const &dev) {
 
 				bool intel_dev   = false;
@@ -316,8 +314,7 @@ class Platform::Session_component : public Rpc_object<Session>,
 				}
 
 				g.node("device", [&]() {
-					copy_attributes(g, dev);
-
+					g.node_attributes(dev);
 					dev.for_each_sub_node([&] (Node const &node) {
 
 						if (!node.has_type("io_mem")) {
@@ -329,30 +326,22 @@ class Platform::Session_component : public Rpc_object<Session>,
 
 						g.node("io_mem", [&]() {
 							node.for_each_attribute([&](auto const &attr){
+								Generator::Tag_name const tag { attr.tag };
 								String<16> value { Cstring(attr.value.start,
 								                           attr.value.num_bytes) };
 
-								if (pci_bar == 2 && (attr.name == "size")) {
+								if (pci_bar == 2 && (tag == "size")) {
 									Range r = { };
 									_device_component.io_mem(1, r);
 
 									value = String<16>(Hex(r.size));
 								}
 
-								g.attribute(attr.name.string(), value.string());
+								g.attribute(tag.string(), value.string());
 							});
 						});
 					});
 				});
-			});
-		}
-
-		void copy_attributes(Generator &g, Node const &from)
-		{
-			using Value = String<64>;
-			from.for_each_attribute([&] (Node::Attribute const &attr) {
-				Value value { Cstring(attr.value.start, attr.value.num_bytes) };
-				g.attribute(attr.name.string(), value);
 			});
 		}
 
@@ -365,7 +354,7 @@ class Platform::Session_component : public Rpc_object<Session>,
 				return;
 
 			g.node(from.type().string(), [&] {
-				copy_attributes(g, from);
+				g.node_attributes(from);
 				from.for_each_sub_node([&] (Node const &sub_node) {
 					copy_node(g, sub_node, { max_depth.value - 1 }); });
 			});

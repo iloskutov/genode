@@ -535,8 +535,9 @@ struct Sculpt::Main : Input_event_handler,
 
 		_usb_config.generate([&] (Generator &g) {
 			config.for_each_attribute([&] (Node::Attribute const &a) {
-				if (a.name != "managed")
-					g.attribute(a.name.string(), a.value.start, a.value.num_bytes); });
+				Generator::Tag_name const tag { a.tag };
+				if (tag != "managed")
+					g.attribute(tag.string(), a.value.start, a.value.num_bytes); });
 
 			g.node("report", [&] {
 				g.attribute("devices", "yes"); });
@@ -2042,8 +2043,9 @@ struct Sculpt::Main : Input_event_handler,
 	{
 		_gui_config.generate([&] (Generator &g) {
 			node.for_each_attribute([&] (Node::Attribute const &a) {
-				if (a.name != "managed")
-					g.attribute(a.name.string(), a.value.start, a.value.num_bytes); });
+				Generator::Tag_name const tag { a.tag };
+				if (tag != "managed")
+					g.attribute(tag.string(), a.value.start, a.value.num_bytes); });
 			node.for_each_sub_node([&] (Node const &sub_node) {
 				if (sub_node.has_type("capture") && sub_node.attribute_value("managed", false)) {
 					g.node("capture", [&] {

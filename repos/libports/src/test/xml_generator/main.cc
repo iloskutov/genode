@@ -13,8 +13,8 @@
 
 #include <base/component.h>
 #include <base/log.h>
-#include <util/xml_generator.h>
-#include <util/xml_node.h>
+#include <xml/generator.h>
+#include <xml/node.h>
 
 using Genode::size_t;
 

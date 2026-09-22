@@ -82,11 +82,12 @@ class Genode::Hid_edit : Noncopyable
 		{
 			bool match = query.type() == from.type();
 			query.for_each_attribute([&] (Node::Attribute const &a) {
-				if (!from.has_attribute(a.name.string()))
+				Generator::Tag_name const tag { a.tag };
+				if (!from.has_attribute(tag.string()))
 					match = false;
 
 				Value const expected { Cstring(a.value.start, a.value.num_bytes) };
-				if (from.attribute_value(a.name.string(), Value()) != expected)
+				if (from.attribute_value(tag.string(), Value()) != expected)
 					match = false;
 			});
 
@@ -190,17 +191,18 @@ class Genode::Hid_edit : Noncopyable
 		{
 			_filter(query, [&] (Node const &query, Node const &from, Generator &g) {
 
-			 Node::Attribute::Name const tag { Node::Quoted_content { query } };
+			 Generator::Tag_name const tag { Node::Quoted_content { query } };
 
 				/* modify attribute in place */
 				bool modified_attr = false;
 				from.for_each_attribute([&] (Node::Attribute const &a) {
-					if (a.name == tag) {
+					Generator::Tag_name const from_tag { a.tag };
+					if (from_tag == tag) {
 						auto orig = from.attribute_value(tag.string(), default_value);
-						g.attribute(a.name.string(), fn(orig));
+						g.attribute(from_tag.string(), fn(orig));
 						modified_attr = true;
 					} else {
-						g.attribute(a.name.string(), a.value.start, a.value.num_bytes);
+						g.attribute(from_tag.string(), a.value.start, a.value.num_bytes);
 					}
 				});
 
@@ -248,8 +250,10 @@ class Genode::Hid_edit : Noncopyable
 
 						bool result = true;
 						selector.for_each_attribute([&] (Node::Attribute const &a) {
-							Value const value { Cstring(a.value.start, a.value.num_bytes) };
-							if (n.attribute_value(a.name.string(), Value()) != value)
+							using Tag = Generator::Tag_name;
+							Tag   const tag   { a.tag   };
+							Value const value { a.value };
+							if (n.attribute_value(tag.string(), Value()) != value)
 								result = false; });
 						return result;
 					};

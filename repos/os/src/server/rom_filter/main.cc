@@ -87,7 +87,7 @@ struct Rom_filter::Main : Input_rom_registry::Action
 	{
 		Main &_main;
 
-		Producer(Main &main, Generator::Type const &type)
+		Producer(Main &main, Node::Type const &type)
 		: Dynamic_rom_session::Producer(type), _main(main) { }
 
 		/**
@@ -114,9 +114,9 @@ struct Rom_filter::Main : Input_rom_registry::Action
 
 		_verbose = config.attribute_value("verbose", false);
 
-		Generator::Type node_type { };
+		Node::Type node_type { };
 		config.with_optional_sub_node("output", [&] (Node const &output) {
-			node_type = output.attribute_value("node", Generator::Type()); });
+			node_type = output.attribute_value("node", Node::Type()); });
 
 		if (node_type.length() <= 1) {
 			warning("missing 'node' attribute in '<output>' node");

@@ -92,9 +92,9 @@ class Test
 		Env                           &_env;
 		Signal_transmitter             _done_transmitter;
 		Attached_rom_dataspace         _config_rom            { _env, "config" };
-		uint64_t                       _max_abs_error_pc      { _config_rom.xml().attribute_value("max_abs_error_pc", (uint64_t)5) };
-		uint64_t                       _measure_duration_us   { _config_rom.xml().attribute_value("measure_duration_us", (uint64_t)3'000'000) };
-		uint64_t                       _min_good_bad_diff_us  { _config_rom.xml().attribute_value("min_good_bad_diff_us", (uint64_t)10) };
+		uint64_t                       _max_abs_error_pc      { _config_rom.node().attribute_value("max_abs_error_pc", (uint64_t)5) };
+		uint64_t                       _measure_duration_us   { _config_rom.node().attribute_value("measure_duration_us", (uint64_t)3'000'000) };
+		uint64_t                       _min_good_bad_diff_us  { _config_rom.node().attribute_value("min_good_bad_diff_us", (uint64_t)10) };
 		uint64_t                       _good_period_us        { _measure_duration_us };
 		uint64_t                       _bad_period_us         { 0 };
 		uint64_t                       _set_period_us         { (_good_period_us - _bad_period_us) / 2 };

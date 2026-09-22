@@ -45,8 +45,6 @@ class Capture::Connection : private Genode::Connection<Session>
 			                    Rotate::R0;
 		}
 
-		static Rotate rotate_from_xml(Xml_node const &n) { return rotate_from_node(n); }
-
 		/**
 		 * Constructor
 		 */

@@ -37,41 +37,11 @@ class Genode::Dynamic_rom_session : public Rpc_object<Rom_session>
 			virtual Result produce_content(Byte_range_ptr const &dst) = 0;
 		};
 
-		class Xml_producer : public Content_producer
-		{
-			public:
-
-				using Node_name = Xml_generator::Tag_name;
-
-			private:
-
-				Node_name const _node_name;
-
-				Result produce_content(Byte_range_ptr const &dst) override
-				{
-					return Xml_generator::generate(dst, _node_name,
-						[&] (Xml_generator &xml) { produce_xml(xml); }
-					).convert<Result>(
-						[&] (size_t)         { return Ok(); },
-						[&] (Buffer_error e) { return e; }
-					);
-				}
-
-			public:
-
-				Xml_producer(Node_name node_name) : _node_name(node_name) { }
-
-				/**
-				 * Generate ROM content
-				 */
-				virtual void produce_xml(Xml_generator &) = 0;
-		};
-
 		class Producer : public Content_producer
 		{
 			private:
 
-				Generator::Type const _type;
+				Node::Type const _type;
 
 				Result produce_content(Byte_range_ptr const &dst) override
 				{
@@ -85,7 +55,7 @@ class Genode::Dynamic_rom_session : public Rpc_object<Rom_session>
 
 			public:
 
-				Producer(Generator::Type type) : _type(type) { }
+				Producer(Node::Type type) : _type(type) { }
 
 				/**
 				 * Generate ROM content

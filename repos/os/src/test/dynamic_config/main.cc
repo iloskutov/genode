@@ -29,8 +29,9 @@ struct Main
 		config.update();
 		config.node().with_sub_node("counter",
 			[&] (Node const &counter) {
-				counter.for_each_quoted_line([&] (auto const &line) {
-					log("obtained counter value ", line, " from config"); });
+				using Value = String<32>;
+				Value const v = counter.attribute_value("value", Value());
+				log("obtained counter value ", v, " from config");
 			},
 			[&] { error("could not parse configuration"); });
 	}

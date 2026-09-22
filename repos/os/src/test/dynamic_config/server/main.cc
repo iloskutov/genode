@@ -100,7 +100,7 @@ struct Main
 
 	void handle_timer()
 	{
-		String<100> config("<config><counter>", counter++, "</counter></config>");
+		String<100> config("config | + counter | value: ", counter++, "\n-");
 		rom_session.configure(config.string());
 		timer.trigger_once(250 * 1000);
 	}

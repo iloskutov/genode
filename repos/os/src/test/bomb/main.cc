@@ -58,7 +58,7 @@ class Bomb_child : public Child_policy
 			_ram_quota(Child::effective_quota(ram_quota)),
 			_parent_services(parent_services)
 		{
-			String<64> config("<config generations=\"", generation, "\" master=\"no\"/>");
+			String<64> config("config | generations: ", generation, " | master: no\n-");
 			_config_policy.load(config.string(), config.length());
 		}
 

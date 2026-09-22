@@ -340,7 +340,7 @@ class Nic_uplink::Main
 		Mac_address _uplink_mac { };
 		bool _uplink_mac_valid { false };
 		Attached_rom_dataspace _config_rom { _env, "config" };
-		bool const _verbose { _config_rom.xml().attribute_value("verbose", false) };
+		bool const _verbose { _config_rom.node().attribute_value("verbose", false) };
 
 		Main(Main const &) = delete;
 

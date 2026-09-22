@@ -178,7 +178,7 @@ void Wireguard::Main::_handle_config()
 
 	if (!_config_rom.valid()) return;
 
-	if (_config_rom.xml().attribute_value("use_rtc", false) == true) {
+	if (_config_rom.node().attribute_value("use_rtc", false) == true) {
 		_set_initial_time_only_once();
 	}
 

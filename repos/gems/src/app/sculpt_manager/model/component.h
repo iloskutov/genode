@@ -68,7 +68,7 @@ struct Sculpt::Component : Noncopyable
 
 	List_model<Connection> connect { };
 
-	Connection pd_connection { String<10>("<pd/>") };
+	Connection pd_connection { Span::from_cstring("pd\n-") };
 
 	void _update_connections_from_node(Node const &node)
 	{

@@ -320,7 +320,8 @@ void Backdrop::Main::_handle_config()
 	_buffer.construct(_env, _gui, mode);
 
 	/* clear surface */
-	_apply_fill(Node(String<100>("<fill color=\"#000000\"/>")));
+	String<100>("fill | color: #000000\n-").with_span([&] (Span const &s) {
+		_apply_fill(Node(s)); });
 
 	/* apply graphics primitives defined in the config */
 	_config.node().for_each_sub_node([&] (Node const &operation) {

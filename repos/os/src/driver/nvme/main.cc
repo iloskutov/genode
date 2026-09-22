@@ -2560,7 +2560,7 @@ struct Nvme::Main : Rpc_object<Typed_root<Block::Session>>
 	Session_command_space _session_commands { };
 	Tslab<Session_command,sizeof(Session_command)*32> _session_commands_slab { _sliced_heap };
 
-	bool const _force_sq { _config_rom.xml().attribute_value("force_sq", false) };
+	bool const _force_sq { _config_rom.node().attribute_value("force_sq", false) };
 
 	void _handle_irq()
 	{

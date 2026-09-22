@@ -23,7 +23,6 @@
 #include <root/root.h>
 #include <timer_session/connection.h>
 #include <util/bit_array.h>
-#include <util/xml_node.h>
 
 /* local includes */
 #include <ahci.h>

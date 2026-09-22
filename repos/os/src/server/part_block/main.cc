@@ -99,8 +99,8 @@ class Block::Main
 
 			bool valid() const { return value != -1L; }
 
-			static Partition_number from_xml(Node            const &node,
-			                                 Partition_table const &table)
+			static Partition_number from_node(Node            const &node,
+			                                  Partition_table const &table)
 			{
 				long const num = node.attribute_value("partition", -1L);
 				bool const valid = num >= 0 && table.partition_valid(num);
@@ -276,7 +276,7 @@ void Block::Main::_handle_session_request(Node const &request)
 		auto match_fn = [&] (Node const &policy) {
 
 			Partition_number const partition =
-				Partition_number::from_xml(policy, _partition_table);
+				Partition_number::from_node(policy, _partition_table);
 
 			/* sessions are not writeable by default */
 			bool const writeable_policy =

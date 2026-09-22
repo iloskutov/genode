@@ -68,7 +68,8 @@ void Component::construct(Env &)
 
 		void _with_node(With_node::Ft const &fn) override
 		{
-			fn(Node { String<50>("<power state=\"reset\"/>") });
+			String<50>("power state: reset\n-").with_span([&] (Span const &s) {
+				fn(Node(s)); });
 		}
 	} action { };
 

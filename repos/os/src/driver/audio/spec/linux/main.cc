@@ -278,7 +278,7 @@ struct Audio_out::Main
 	Main(Genode::Env &env) : env(env)
 	{
 		using Dev = Genode::String<32>;
-		Dev const dev = config.xml().attribute_value("alsa_device", Dev("hw"));
+		Dev const dev = config.node().attribute_value("alsa_device", Dev("hw"));
 
 		/* init ALSA */
 		int err = audio_drv_init(dev.string());

@@ -32,7 +32,7 @@ struct Fs_packet::Main
 
 	Attached_rom_dataspace _config { _env, "config" };
 
-	int _packet_count = _config.xml().attribute_value("count", 1U << 10);
+	int _packet_count = _config.node().attribute_value("count", 1U << 10);
 
 	Heap                    _heap { _env.ram(), _env.rm() };
 	Allocator_avl           _avl_alloc { &_heap };

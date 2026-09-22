@@ -469,7 +469,7 @@ void Component::construct(Env &env)
 		test_stack_alloc(env);
 		test_stack_alignment(env);
 		test_main_thread();
-		if (config.xml().attribute_value("pause_resume", false))
+		if (config.node().attribute_value("pause_resume", false))
 			test_pause_resume(env);
 
 		test_create_as_many_threads(env);

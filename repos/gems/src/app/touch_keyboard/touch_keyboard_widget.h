@@ -74,7 +74,7 @@ struct Dialog::Touch_keyboard_widget : Widget<Vbox>
 
 				if (key.has_attribute("char")) {
 					text = key.attribute_value("char", Text());
-					emit = Emit(Xml_unquoted(text));
+					emit = Emit(Utf8_ptr(text.string()).codepoint());
 				}
 
 				if (key.has_attribute("code")) {

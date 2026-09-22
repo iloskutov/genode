@@ -187,7 +187,8 @@ struct Vfs_capture::File_system : Union_file_system, Vfs::File_system::Factory
 
 	Progress update(Node const &, Vfs::File_system::Factory &) override
 	{
-		return Union_file_system::update(Node(_config(_name)), *this);
+		return _config(_name).with_span([&] (Span const &s) {
+			return Union_file_system::update(Node(s), *this); });
 	}
 
 	static const char *name() { return "capture"; }

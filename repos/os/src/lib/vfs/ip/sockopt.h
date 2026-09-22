@@ -205,7 +205,8 @@ struct Vfs_ip::Sockopt_file_system : Dir_file_system, File_system::Factory
 		Dir_file_system(env, parent_fs, "sockopts"),
 		_sock(sock)
 	{
-		Dir_file_system::update(Node(_config()), *this);
+		_config().with_span([&] (Span const &s) {
+			Dir_file_system::update(Node(s), *this); });
 	}
 
 	~Sockopt_file_system() { Dir_file_system::update(Node(), *this); }

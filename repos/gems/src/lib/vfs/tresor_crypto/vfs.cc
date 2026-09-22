@@ -284,7 +284,8 @@ class Vfs_tresor_crypto::Key_file_system : public Dir_file_system,
 			_encrypt_fs(*this, crypto, key_id),
 			_decrypt_fs(*this, crypto, key_id)
 		{
-			Dir_file_system::update(Node(_config(key_id)), *this);
+			_config(key_id).with_span([&] (Span const &s) {
+				Dir_file_system::update(Node(s), *this); });
 		}
 
 		~Key_file_system() { Dir_file_system::update(Node(), *this); }
@@ -849,7 +850,8 @@ struct Vfs_tresor_crypto::File_system : Dir_file_system, Vfs::File_system::Facto
 
 		Progress update(Node const &config, Vfs::File_system::Factory &) override
 		{
-			return Dir_file_system::update(Node(_config(config)), *this);
+			return _config(config).with_span([&] (Span const &s) {
+				return Dir_file_system::update(Node(s), *this); });
 		}
 
 		void destruct() override { destroy(_env.alloc(), this); }

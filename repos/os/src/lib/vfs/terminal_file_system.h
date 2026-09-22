@@ -361,7 +361,8 @@ struct Vfs_terminal::File_system : Union_file_system,
 
 	Progress update(Node const &, Vfs::File_system::Factory &) override
 	{
-		return Union_file_system::update(Node(_config(_name)), *this);
+		return _config(_name).with_span([&] (Span const &s) {
+			return Union_file_system::update(Node(s), *this); });
 	}
 
 	static constexpr auto BUILTIN_FS_TYPE = "terminal";

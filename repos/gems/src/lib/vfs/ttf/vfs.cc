@@ -151,7 +151,8 @@ struct Vfs_ttf::File_system : Dir_file_system,
 
 	Progress update(Node const &config, Vfs::File_system::Factory &) override
 	{
-		Dir_file_system::update(Node(_config(config)), *this);
+		_config(config).with_span([&] (Span const &s) {
+			Dir_file_system::update(Node(s), *this); });
 
 		Font_config const orig = _font_config;
 		_font_config = Font_config::from_node(config);

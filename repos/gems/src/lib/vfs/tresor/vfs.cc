@@ -1406,7 +1406,8 @@ struct Vfs_tresor::Current_file_system : Dir_file_system, private Vfs::File_syst
 
 	Progress update(Node const &, Vfs::File_system::Factory &) override
 	{
-		return Dir_file_system::update(Node(_config()), *this);
+		return _config().with_span([&] (Span const &s) {
+			return Dir_file_system::update(Node(s), *this); });
 	}
 };
 
@@ -1461,7 +1462,8 @@ struct Vfs_tresor::Control_file_system : Dir_file_system, private Vfs::File_syst
 
 	Progress update(Node const &, Vfs::File_system::Factory &) override
 	{
-		return Dir_file_system::update(Node(_config()), *this);
+		return _config().with_span([&] (Span const &s) {
+			return Dir_file_system::update(Node(s), *this); });
 	}
 };
 
@@ -1509,7 +1511,8 @@ struct Vfs_tresor::File_system : Dir_file_system, private Vfs::File_system::Fact
 
 	Progress update(Node const &config, Vfs::File_system::Factory &) override
 	{
-		return Dir_file_system::update(Node(_config(config)), *this);
+		return _config(config).with_span([&] (Span const &s) {
+			return Dir_file_system::update(Node(s), *this); });
 	}
 
 	void destruct() override { destroy(_env.alloc(), this); }

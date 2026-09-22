@@ -121,15 +121,18 @@ class Genode::Hid_edit : Noncopyable
 
 			_with_src_dst([&] (Const_byte_range_ptr const &src, Byte_range_ptr const &dst) {
 
-				Node query { hid_query };
-				Node from  { src };
+				hid_query.with_span([&] (Span const &hid_query) {
 
-				/* top-level type of query must match */
-				if (query.type() != from.type())
-					return;
+					Node query { hid_query };
+					Node from  { src };
 
-				_content = Generator::generate(dst, from.type(), [&] (Generator &g) {
-					_filter_rec(query, from, g, fn); });
+					/* top-level type of query must match */
+					if (query.type() != from.type())
+						return;
+
+					_content = Generator::generate(dst, from.type(), [&] (Generator &g) {
+						_filter_rec(query, from, g, fn); });
+				});
 			});
 
 			if (_content.ok())
@@ -187,7 +190,7 @@ class Genode::Hid_edit : Noncopyable
 		{
 			_filter(query, [&] (Node const &query, Node const &from, Generator &g) {
 
-				Node::Attribute::Name tag { Node::Quoted_content { query } };
+			 Node::Attribute::Name const tag { Node::Quoted_content { query } };
 
 				/* modify attribute in place */
 				bool modified_attr = false;
@@ -234,28 +237,31 @@ class Genode::Hid_edit : Noncopyable
 
 				Query const selector_hid { Node::Quoted_content { query }, "\n-" };
 
-				Node const selector { selector_hid };
+				selector_hid.with_span([&] (Span const &selector_hid) {
 
-				auto selected = [&] (Node const &n)
-				{
-					if (n.type() != selector.type())
-						return false;
+					Node const selector { selector_hid };
 
-					bool result = true;
-					selector.for_each_attribute([&] (Node::Attribute const &a) {
-						Value const value { Cstring(a.value.start, a.value.num_bytes) };
-						if (n.attribute_value(a.name.string(), Value()) != value)
-							result = false; });
-					return result;
-				};
+					auto selected = [&] (Node const &n)
+					{
+						if (n.type() != selector.type())
+							return false;
 
-				g.node_attributes(from);
+						bool result = true;
+						selector.for_each_attribute([&] (Node::Attribute const &a) {
+							Value const value { Cstring(a.value.start, a.value.num_bytes) };
+							if (n.attribute_value(a.name.string(), Value()) != value)
+								result = false; });
+						return result;
+					};
 
-				from.for_each_sub_node([&] (Node const &node) {
-					if (selected(node))
-						fn(node, g);
-					else
-						(void)g.append_node(node, Generator::Max_depth { 20 }); });
+					g.node_attributes(from);
+
+					from.for_each_sub_node([&] (Node const &node) {
+						if (selected(node))
+							fn(node, g);
+						else
+							(void)g.append_node(node, Generator::Max_depth { 20 }); });
+				});
 			});
 		}
 

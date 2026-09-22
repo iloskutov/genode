@@ -1413,7 +1413,8 @@ struct Vfs_oss::File_system : public Union_file_system,
 
 	Progress update(Node const &node, Vfs::File_system::Factory &) override
 	{
-		return Union_file_system::update(Node(_config(name(node))), *this);
+		return _config(name(node)).with_span([&] (Span const &s) {
+			return Union_file_system::update(Node(s), *this); });
 	}
 
 	void destruct() override { destroy(_env.alloc(), this); }

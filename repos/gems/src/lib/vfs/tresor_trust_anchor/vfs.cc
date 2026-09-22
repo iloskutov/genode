@@ -1764,7 +1764,8 @@ struct Vfs_tresor_trust_anchor::File_system : Dir_file_system, Vfs::File_system:
 
 	Progress update(Node const &config, Vfs::File_system::Factory &) override
 	{
-		return Dir_file_system::update(Node(_config(config)), *this);
+		return _config(config).with_span([&] (Span const &s) {
+			return Dir_file_system::update(Node(s), *this); });
 	}
 
 	void resume_after_update() override

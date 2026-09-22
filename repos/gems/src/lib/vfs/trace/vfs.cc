@@ -286,13 +286,15 @@ struct Vfs_trace::Subject : Dir_file_system, private Vfs::File_system::Factory
 
 	using Config = String<200>;
 
+	static Name _name(Node const &n) { return n.attribute_value("name", Name()); }
+
 	static Config _config(Node const &node)
 	{
 		char buf[Config::capacity()] { };
 
 		Generator::generate({ buf, sizeof(buf) }, "dir",
 			[&] (Generator &g) {
-				g.attribute("name", node.attribute_value("name", Vfs_trace::Name()));
+				g.attribute("name", _name(node));
 				g.named_node("value", "enable");
 				g.named_node("value", "buffer_size");
 				g.node("trace_buffer");
@@ -306,12 +308,11 @@ struct Vfs_trace::Subject : Dir_file_system, private Vfs::File_system::Factory
 	Subject(Vfs::Env &env, Parent_fs &parent_fs, Trace::Connection &trace,
 	        Trace::Policy_id policy, Node const &node)
 	:
-		Dir_file_system(env, parent_fs,
-		                node.attribute_value("name", Vfs_trace::Name()),
-		                Ident::from_node(Node(_config(node)))),
+		Dir_file_system(env, parent_fs, _name(node), Ident { { "dir ", _name(node) } }),
 		_env(env), _trace_fs(env, *this, trace, policy, { node.attribute_value("id", 0u) })
 	{
-		Dir_file_system::update(Node(_config(node)), *this);
+		_config(node).with_span([&] (Span const &s) {
+			Dir_file_system::update(Node(s), *this); });
 	}
 
 	~Subject() { Dir_file_system::update(Node(), *this); }

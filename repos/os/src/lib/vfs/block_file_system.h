@@ -706,7 +706,8 @@ struct Vfs_block::File_system : Union_file_system, private Vfs::File_system::Fac
 
 	Progress update(Node const &, Vfs::File_system::Factory &) override
 	{
-		return Union_file_system::update(Node(_config(_name)), *this);
+		return _config(_name).with_span([&] (Span const &s) {
+			return Union_file_system::update(Node(s), *this); });
 	}
 
 	static constexpr auto BUILTIN_FS_TYPE = "block";

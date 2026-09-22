@@ -83,8 +83,10 @@ config | prio_levels: 2
   |   + pci | vendor_id: 0x8086 | device_id: 0x54ea | . Alder Lake N (StarLite)
   |   + pci | vendor_id: 0x8086 | device_id: 0x7e51 | . Meteor Lake chipset
   |   + pci | vendor_id: 0x8086 | device_id: 0x7778 | . Arrow Lake chipset
-  |   + device INT34C5  | . Tiger/Alder Lake
-  |   + device INTC1083 | . Meteor/Arrow Lake
+  |   + pci | vendor_id: 0x8086 | device_id: 0xe378 | . Panther Lake chipset
+  |   + device INT34C5          | . Tiger/Alder Lake
+  |   + device INTC1083         | . Meteor/Arrow Lake
+  |   + device ZBOOK_X_SYNA3167 | . HP ZBook X G2i 16
   + route
     + service ROM | label: devices      | + child drivers_reports
     + service ROM | label: system       | + child drivers_reports
@@ -102,10 +104,12 @@ config | prio_levels: 2
     x i2c_slave  | irq: 3   | bus_addr: 44 | hid_addr: 32 | gpio_chip: INT34C5  | . Framework Gen12/Gen13
     x i2c_slave  | irq: 352 | bus_addr: 44 | hid_addr: 32 | gpio_chip: INTC1083 | . Framework Core Ultra Series 1
     x i2c_slave  | irq: 128 | bus_addr: 44 | hid_addr: 32 | gpio_chip: INTC1083 | . HP ZBook Core Ultra Series 2
+    x i2c_slave  | irq:  86 | bus_addr: 44 | hid_addr: 32                       | . HP ZBook X G2i 16
     x i2c_slave  | irq: 104 | bus_addr: 93 | hid_addr: 1                        | . StarLabs StarLite V
 
     + i2c_master | bus_speed_hz: 400 | + fmcn | hcnt: 193 | lcnt: 313 | hold_time: 80 | . Tiger/Alder/Raptor Lake
     x i2c_master | bus_speed_hz: 400 | + fmcn | hcnt: 115 | lcnt: 120 | hold_time: 35 | . Meteor/Arrow Lake
+    x i2c_master | bus_speed_hz: 400 | + fmcn | hcnt: 110 | lcnt: 130 | hold_time: 48 | . Panther Lake
     x i2c_master | bus_speed_hz: 400 | + fmcn | hcnt: 106 | lcnt: 213 | hold_time: 80 | . StarLabs StarLite V
 
 + start event_dump | ram: 1M

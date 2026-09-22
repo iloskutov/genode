@@ -790,6 +790,22 @@ void Main::parse_acpi_device_info(Node const &node, Generator &g)
 			g.attribute("size",    "0x1000");
 		});
 	});
+
+	/*
+	 * HP ZBook X 16 G2i Touchpad IRQ
+	 */
+	g.node("device", [&]
+	{
+		g.attribute("name", "ZBOOK_X_SYNA3167");
+		g.attribute("type", "acpi");
+		g.node("irq", [&]
+		{
+			g.attribute("number", 86U);
+			g.attribute("mode", "level");
+			g.attribute("polarity", "low");
+		});
+	});
+
 }
 
 

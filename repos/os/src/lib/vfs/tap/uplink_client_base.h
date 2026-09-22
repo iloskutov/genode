@@ -43,7 +43,7 @@ class Genode::Uplink_client_base : Noncopyable
 		Env                                  &_env;
 		Vfs::Env::User                       &_vfs_user;
 		Allocator                            &_alloc;
-		Label                     const      &_label;
+		Label                           const _label;
 		Net::Mac_address                      _drv_mac_addr;
 		bool                                  _drv_mac_addr_used               { false };
 		bool                                  _drv_link_state                  { false };

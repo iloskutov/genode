@@ -34,6 +34,8 @@ Board::Timer::Timer(Cpu &cpu)
 	});
 
 	timer_init(Board::TIMER_VECTOR_KERNEL, (uint8_t)divider);
+
+	log("TSC ", tsc_ticks_per_ms, " kHz / APIC ", ticks_per_ms, " kHz");
 }
 
 

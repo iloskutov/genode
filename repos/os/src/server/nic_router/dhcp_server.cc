@@ -55,7 +55,7 @@ bool Dhcp_server_base::finish_construction(Node const &node, Domain const &domai
 		_dns_domain_name.set_to(sub_node.attribute_value("name", Dns_domain_name::String()));
 
 		if (domain.config().verbose() && !_dns_domain_name.valid())
-			log("[", domain, "] rejecting invalid <dns-domain> from DHCP server configuration");
+			log("[", domain, "] rejecting invalid 'dns-domain' from DHCP server configuration");
 	});
 	return result;
 }

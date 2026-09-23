@@ -525,7 +525,7 @@ struct Test::Main
 							_scenarios.enqueue(*ptr); });
 				},
 				[&] {
-					error("config lacks <tests> sub node");
+					error("config lacks 'tests' sub node");
 				});
 		} catch (...) { error("invalid tests"); }
 	}

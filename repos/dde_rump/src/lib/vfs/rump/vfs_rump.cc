@@ -365,7 +365,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 			Fs_type fs_type = config.attribute_value("fs", Fs_type());
 
 			if (!_check_type(fs_type.string())) {
-				error("Invalid or no file system given (use \'<rump fs=\"<fs type>\"/>)");
+				error("Invalid or no file system given (use 'rump | fs: <fs-type>')");
 				_print_types();
 				throw Exception();
 			}

@@ -222,7 +222,7 @@ void Backdrop::Main::_apply_image(Node const &operation)
 	using Area  = Surface_base::Area;
 
 	if (!operation.has_attribute("png")) {
-		Genode::warning("missing 'png' attribute in <image> node");
+		Genode::warning("missing 'png' attribute in 'image' node");
 		return;
 	}
 

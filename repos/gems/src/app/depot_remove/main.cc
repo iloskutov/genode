@@ -207,7 +207,7 @@ class Depot_remove::Archive_remover
 			_arch  { config.attribute_value("arch", String<32>()) }
 		{
 			if (config.has_sub_node("remove") && config.has_sub_node("remove-all")) {
-				warning("<remove/> and <remove-all/> are mutually exclusive");
+				warning("'remove' and 'remove-all' are mutually exclusive");
 				return;
 			}
 
@@ -256,7 +256,7 @@ struct Depot_remove::Main
 		}
 
 		if (!config.has_sub_node("vfs")) {
-			warning("configuration misses a <vfs> configuration node");
+			warning("configuration misses a 'vfs' configuration node");
 			return;
 		}
 

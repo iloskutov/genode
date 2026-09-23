@@ -177,7 +177,7 @@ class Sandbox::Child : Child_policy, Routed_service::Wakeup
 			if (name.valid())
 				return name;
 
-			warning("missing 'name' attribute in '<start>' entry");
+			warning("missing 'name' attribute in 'start' node");
 			throw Missing_name_attribute();
 		}
 

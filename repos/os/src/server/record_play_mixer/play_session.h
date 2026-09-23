@@ -372,7 +372,7 @@ class Mixer::Play_session : public Session_object<Play::Session, Play_session>,
 			if (_scheduler.learned_jitter_ms() > _expected_jitter_us/1000) {
 				if (_operations.once_in_a_while()) {
 					warning("jitter of ", _scheduler.learned_jitter_ms(), " ms is higher than expected");
-					warning("(increase 'jitter_ms' attribute of <play> node?)");
+					warning("(increase 'jitter_ms' attribute of 'play' node?)");
 				}
 			}
 

@@ -194,7 +194,7 @@ struct Mixer::Mix_signal : Audio_signal
 	{
 		if (_input_buffer_used) {
 			if (!_warned_once)
-				error("attempt to feed <mix> output (", name, ") as input to the same node");
+				error("attempt to feed 'mix' output (", name, ") as input to the same node");
 			_warned_once = true;
 			return false;
 		}

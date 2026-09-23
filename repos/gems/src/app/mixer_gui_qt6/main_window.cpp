@@ -448,7 +448,7 @@ Main_window::Main_window(Genode::Env &env)
 			_default_volume     = node.attribute_value("volume", 0L);
 			_default_muted      = node.attribute_value("muted", 1L);
 		},
-		[&] { warning("no <default> node found, fallback is 'muted=1'"); }
+		[&] { warning("no 'default' node found, fallback is 'muted: yes'"); }
 	);
 }
 

@@ -62,7 +62,7 @@ static inline bool Test::node_attribute_matches(Node const &condition,
 		return (size_t)node.attribute_value(name.string(), Number_of_bytes()) < value;
 	}
 
-	error("missing condition in <attribute> node");
+	error("missing condition in 'attribute' node");
 	return false;
 }
 

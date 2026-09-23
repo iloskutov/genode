@@ -187,7 +187,7 @@ void Trace_recorder::Monitor::start(Node const &config)
 					);
 
 				if (!present)
-					error("No writer available for <", node.type(), "/>.");
+					error("no writer available for '", node.type(), "'.");
 				else
 					log("Enabled ", node.type(), " writer for ", info.session_label(),
 					                             " -> ",         info.thread_name());

@@ -154,7 +154,7 @@ struct Main
 									child.attribute_value("label", Session_label::String());
 
 							}, [&] () {
-								Genode::warning("<child> node not found");
+								Genode::warning("'child' node not found");
 								return;
 							});
 						}
@@ -200,7 +200,7 @@ struct Main
 						component_dir.create_symlink(debug_file_path, depot_dbg_path, { });
 					});
 				}, [&] () {
-					Genode::error("<route> node not found");
+					Genode::error("'route' node not found");
 				});
 			});
 		});
@@ -221,11 +221,11 @@ struct Main
 				config.with_sub_node("monitor", [&] (Node const &monitor) {
 					_process_monitor_config(config, monitor);
 				}, [&] () {
-					Genode::error("<monitor> node not found");
+					Genode::error("'monitor' node not found");
 				});
 			});
 		} catch (File_content::Truncated_during_read) {
-			Genode::error("Could not read ", _runtime_config_path);
+			Genode::error("could not read ", _runtime_config_path);
 		}
 	}
 

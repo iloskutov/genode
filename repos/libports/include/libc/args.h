@@ -188,7 +188,7 @@ static void populate_args_and_env(Libc::Env &env, int &argc, char **&argv, char 
 
 				auto check_attr = [] (Node const &node, auto key) {
 					if (!node.has_attribute(key))
-						Genode::warning("<env> node lacks '", key, "' attribute"); };
+						Genode::warning("'env' node lacks '", key, "' attribute"); };
 
 				check_attr(node, "key");
 				check_attr(node, "value");

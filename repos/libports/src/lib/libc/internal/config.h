@@ -88,8 +88,8 @@ namespace Libc {
 					[&] (Node const &libc) {
 						libc.with_sub_node("vfs",
 							[&] (Node const &vfs_config) {
-								warning("'<config> <libc> <vfs/>' is deprecated, "
-								        "please move to '<config> <vfs/>'");
+								warning("'config | + libc | + vfs' is deprecated, "
+								        "please move to 'config | + vfs'");
 								fn(vfs_config);
 							},
 							[&] { fn(Node()); });

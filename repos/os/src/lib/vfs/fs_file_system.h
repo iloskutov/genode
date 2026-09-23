@@ -728,8 +728,8 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			    buffer_size(config))
 		{
 			if (config.has_attribute("root")) {
-				warning("vfs: <fs> node uses deprecated 'root' attribute.");
-				warning("     Append the root dir to the label instead.");
+				warning("vfs: 'fs' node uses deprecated 'root' attribute.");
+				warning("      Append the root dir to the label instead.");
 			}
 
 			_fs.sigh(_signal_handler);

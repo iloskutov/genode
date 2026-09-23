@@ -181,7 +181,7 @@ struct Depot_deploy::Main : Option::Action
 			[&] (Node const &static_config) {
 				if (!g.append_node_content(static_config, MAX_NODE_DEPTH))
 					warning("config too deeply nested: ", static_config); },
-			[&] { warning("config lacks <static> node"); });
+			[&] { warning("config lacks 'static' node"); });
 
 		auto copy_nodes = [&] (auto const &node_type)
 		{
@@ -200,7 +200,7 @@ struct Depot_deploy::Main : Option::Action
 				                          _attr.depot_rom,
 				                          [] (Child::Name const &) { return true; });
 			},
-			[&] { warning("config lacks <common_routes> node"); });
+			[&] { warning("config lacks 'common_routes' node"); });
 	}
 
 	Main(Env &env) : _env(env)

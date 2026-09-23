@@ -42,12 +42,12 @@ struct Menu_view::Root_widget : Widget
 		char const *dialog_tag = "dialog";
 
 		if (!node.has_type(dialog_tag)) {
-			Genode::error("no valid <dialog> tag found");
+			Genode::error("no valid 'dialog' found");
 			return;
 		}
 
 		if (!node.num_sub_nodes()) {
-			Genode::warning("empty <dialog> node");
+			Genode::warning("empty 'dialog' node");
 			return;
 		}
 

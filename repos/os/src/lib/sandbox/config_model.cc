@@ -379,7 +379,7 @@ void Config_model::update_from_node(Node                     const &node,
 		if (Service_node::type_matches(node))
 			return *new (alloc) Service_node(service_factory, node);
 
-		error("unknown config element type <", node.type(), ">");
+		error("unknown config element type '", node.type(), "'");
 		throw Unknown_element_type();
 	};
 

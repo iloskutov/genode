@@ -196,12 +196,10 @@ void Fs_tool::Main::_new_file(Node const &operation)
 		create_error = true; }
 
 	if (create_error && _verbose)
-		warning("operation <new-file path=\"", path, "\"> "
-		        "failed because creating the file failed");
+		warning("new-file failed to create ", path);
 
 	if (write_error && _verbose)
-		warning("operation <new-file path=\"", path, "\"> "
-		        "failed because writing to the file failed");
+		warning("new-file failed to write to ", path);
 }
 
 

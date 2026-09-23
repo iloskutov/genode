@@ -35,7 +35,7 @@ void Global_keys::apply_config(Node const &config, Session_list &session_list)
 	config.for_each_sub_node("global-key", [&] (Node const &node) {
 
 		if (!node.has_attribute("name")) {
-			warning("attribute 'name' missing in <global-key> config node");
+			warning("attribute 'name' missing in 'global-key' config node");
 			return;
 		}
 

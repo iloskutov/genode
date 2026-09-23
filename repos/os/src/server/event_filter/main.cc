@@ -230,8 +230,8 @@ struct Event_filter::Main : Source::Factory, Source::Trigger
 							return;
 						}
 
-						warning("unexpected <", node.type(), "> node " "in included "
-						        "ROM \"", _name, "\", expected, <", type, "> node");
+						warning("unexpected '", node.type(), "' node " "in included "
+						        "ROM \"", _name, "\", expected, '", type, "' node");
 						missing_fn();
 					},
 					[&] (Env::Local_rm::Error) { });
@@ -381,7 +381,7 @@ struct Event_filter::Main : Source::Factory, Source::Trigger
 			                                         _timer_accessor, *this,
 			                                         _heap, _include_accessor);
 
-		warning("unknown <", node.type(), "> input-source node type");
+		warning("unknown '", node.type(), "' input-source node type");
 		throw Source::Invalid_config();
 	}
 
@@ -451,7 +451,7 @@ struct Event_filter::Main : Source::Factory, Source::Trigger
 				_output.construct(output, *this); });
 		}
 		catch (Source::Invalid_config) {
-			warning("invalid <output> configuration"); }
+			warning("invalid 'output' configuration"); }
 
 		catch (Allocator::Out_of_memory) {
 			error("out of memory while constructing filter chain"); }

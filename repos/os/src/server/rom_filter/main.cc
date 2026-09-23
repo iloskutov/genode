@@ -119,7 +119,7 @@ struct Rom_filter::Main : Input_rom_registry::Action
 			node_type = output.attribute_value("node", Node::Type()); });
 
 		if (node_type.length() <= 1) {
-			warning("missing 'node' attribute in '<output>' node");
+			warning("missing 'node' attribute in 'output' node");
 			node_type = "undefined";
 		}
 

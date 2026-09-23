@@ -601,7 +601,7 @@ Main::Monitor::~Monitor()
 void Main::_update_monitors()
 {
 	if (!_config.node().has_sub_node("monitor"))
-		warning("no <monitor label=\"...\"/> config node found - running headless");
+		warning("no 'monitor | label: ...' config node found - running headless");
 
 	unsigned const max_id = _machine.monitor_count().value - 1;
 

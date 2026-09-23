@@ -125,7 +125,7 @@ class Nitpicker::Domain_registry
 			if (value == "no")  return Entry::Label::NO;
 			if (value == "yes") return Entry::Label::YES;
 
-			warning("invalid value of label attribute in <domain>");
+			warning("invalid value of label attribute in 'domain'");
 			return Entry::Label::YES;
 		}
 
@@ -148,7 +148,7 @@ class Nitpicker::Domain_registry
 			if (value == "focused") return Entry::Hover::FOCUSED;
 			if (value == "always")  return Entry::Hover::ALWAYS;
 
-			warning("invalid value of hover attribute in <domain>");
+			warning("invalid value of hover attribute in 'domain'");
 			return Entry::Hover::FOCUSED;
 		}
 
@@ -161,7 +161,7 @@ class Nitpicker::Domain_registry
 			if (value == "click")     return Entry::Focus::CLICK;
 			if (value == "transient") return Entry::Focus::TRANSIENT;
 
-			warning("invalid value of focus attribute in <domain>");
+			warning("invalid value of focus attribute in 'domain'");
 			return Entry::Focus::NONE;
 		}
 
@@ -173,7 +173,7 @@ class Nitpicker::Domain_registry
 			if (value == "client") return Entry::Input::CLIENT;
 			if (value == "always") return Entry::Input::ALWAYS;
 
-			warning("invalid value of input attribute in <domain>");
+			warning("invalid value of input attribute in 'domain'");
 			return Entry::Input::CLIENT;
 		}
 
@@ -188,7 +188,7 @@ class Nitpicker::Domain_registry
 			if (value == "bottom_right") return Entry::Origin::BOTTOM_RIGHT;
 			if (value == "pointer")      return Entry::Origin::POINTER;
 
-			warning("invalid value of origin attribute in <domain>");
+			warning("invalid value of origin attribute in 'domain'");
 			return Entry::Origin::BOTTOM_LEFT;
 		}
 

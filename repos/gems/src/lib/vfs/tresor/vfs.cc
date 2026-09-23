@@ -885,7 +885,7 @@ class Vfs_tresor::Plugin : private Noncopyable, private Client_data_interface, p
 };
 
 
-class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_system
+class Vfs_tresor::Data_file_system : public Single_file_system
 {
 	private:
 
@@ -977,7 +977,7 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 
 		Stat_result stat(char const *path, Stat &out) override
 		{
-			Stat_result result = STAT_ERR_NO_ENTRY;
+			Stat_result result = Stat_result::DENIED;
 			_plugin.with_data_file_size([&] (Vfs::file_size size) {
 				result = Single_file_system::stat(path, out);
 				out.size = size;
@@ -995,7 +995,7 @@ class Vfs_tresor::Data_file_system : private Noncopyable, public Single_file_sys
 };
 
 
-class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_system
+class Vfs_tresor::Extend_file_system : public Single_file_system
 {
 	private:
 
@@ -1131,7 +1131,7 @@ class Vfs_tresor::Extend_file_system : private Noncopyable, public Single_file_s
 };
 
 
-class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_system
+class Vfs_tresor::Rekey_file_system : public Single_file_system
 {
 	private:
 
@@ -1249,7 +1249,7 @@ class Vfs_tresor::Rekey_file_system : private Noncopyable, public Single_file_sy
 };
 
 
-class Vfs_tresor::Deinitialize_file_system : private Noncopyable, public Single_file_system
+class Vfs_tresor::Deinitialize_file_system : public Single_file_system
 {
 	private:
 

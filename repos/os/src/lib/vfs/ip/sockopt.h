@@ -116,11 +116,6 @@ class Vfs_ip::Sockopt_value_file_system : public Single_file_system
 			_sock(sock)
 		{ }
 
-
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))

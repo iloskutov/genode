@@ -374,7 +374,7 @@ class Vfs_ram::Directory : public Vfs_ram::Node
 
 		Dir_channel::Read_result read_dir(Byte_range_ptr const &dst, Seek const seek)
 		{
-			using Dirent = Directory_service::Dirent;
+			using Dirent = Vfs::File_system::Dirent;
 
 			if (dst.num_bytes < sizeof(Dirent))
 				return Dir_channel::Read_error::DENIED;
@@ -511,11 +511,6 @@ class Vfs_ram::File_system : public Vfs::File_system
 
 		~File_system() { _root.empty(_env.alloc()); }
 
-
-		/*********************************
-		 ** Directory service interface **
-		 *********************************/
-
 		unsigned num_dirent(char const *path) override
 		{
 			if (Node * const node = lookup(path))
@@ -610,7 +605,7 @@ class Vfs_ram::File_system : public Vfs::File_system
 		{
 			Node * const node_ptr = lookup(path);
 			if (!node_ptr)
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 
 			Node &node = *node_ptr;
 
@@ -630,36 +625,36 @@ class Vfs_ram::File_system : public Vfs::File_system
 				.modification_time = node.mtime
 			};
 
-			return STAT_OK;
+			return Stat_result::OK;
 		}
 
 		Rename_result rename(char const * const from, char const * const to) override
 		{
 			if ((strcmp(from, to) == 0) && lookup(from))
-				return RENAME_OK;
+				return Rename_result::OK;
 
 			char const * const new_name = basename(to);
 			if (strlen(new_name) >= MAX_NAME_LEN)
-				return RENAME_ERR_NO_PERM;
+				return Rename_result::DENIED;
 
 			Directory * const from_dir = lookup_parent(from);
 			if (!from_dir)
-				return RENAME_ERR_NO_ENTRY;
+				return Rename_result::DENIED;
 
 			Directory * const to_dir = lookup_parent(to);
 			if (!to_dir)
-				return RENAME_ERR_NO_ENTRY;
+				return Rename_result::DENIED;
 
 			Node * const from_node = from_dir->child(basename(from));
 			if (!from_node)
-				return RENAME_ERR_NO_ENTRY;
+				return Rename_result::DENIED;
 
 			Node * const to_node = to_dir->child(new_name);
 			if (to_node) {
 
 				if (Directory * const dir = dynamic_cast<Directory*>(to_node))
 					if (dir->length() || (!dynamic_cast<Directory*>(from_node)))
-						return RENAME_ERR_NO_PERM;
+						return Rename_result::DENIED;
 
 				/* detach node to be replaced from directory */
 				to_dir->release(to_node);
@@ -677,25 +672,25 @@ class Vfs_ram::File_system : public Vfs::File_system
 			_notify_compound_dir_watchers(from);
 			_notify_compound_dir_watchers(to);
 
-			return RENAME_OK;
+			return Rename_result::OK;
 		}
 
 		Unlink_result unlink(char const * const path) override
 		{
 			Directory * const parent = lookup_parent(path);
 			if (!parent)
-				return UNLINK_ERR_NO_ENTRY;
+				return Unlink_result::DENIED;
 
 			Node * const node = parent->child(basename(path));
 			if (!node)
-				return UNLINK_ERR_NO_ENTRY;
+				return Unlink_result::DENIED;
 
 			/* defer unlink of a node that is still referenced by a file channel */
 			node->mark_as_unlinked();
 
 			_try_complete_unlink({ Cstring(path) }, parent, *node);
 
-			return UNLINK_OK;
+			return Unlink_result::OK;
 		}
 
 		Mkdir_result mkdir(char const *path, Timestamp ts) override

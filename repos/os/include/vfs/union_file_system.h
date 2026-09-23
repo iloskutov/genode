@@ -170,63 +170,6 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 		 */
 		bool _top_dir(char const *path) const { return strcmp(path, "/") == 0; }
 
-		/**
-		 * Perform operation on a file system
-		 *
-		 * \param fn  functor that takes a file-system reference and
-		 *            the path as arguments
-		 */
-		template <typename RES>
-		RES _dir_op(RES const no_entry, RES const no_perm, RES const ok,
-		            char const *path, auto const &fn)
-		{
-			/*
-			 * Prevent operation if path equals directory name defined
-			 * via the static VFS configuration.
-			 */
-			if (strlen(path) == 0)
-				return no_perm;
-
-			/*
-			 * If any of the sub file systems returns a permission error and
-			 * there exists no sub file system that takes the request, we
-			 * return the permission error.
-			 */
-			bool permission_denied = false;
-
-			/*
-			 * Keep the most meaningful error code. When using stacked file
-			 * systems, most child file systems will eventually return no
-			 * entry (or leave the error code unchanged). If any of those
-			 * file systems has anything more interesting to tell, return
-			 * this information after all file systems have been tried and
-			 * none could handle the request.
-			 */
-			RES result = no_entry;
-
-			/*
-			 * The given path refers to at least one of our sub directories.
-			 * Propagate the request into all of our file systems. If at least
-			 * one operation succeeds, we return success.
-			 */
-			bool done = false;
-			_for_each_fs([&] (Fs &fs) {
-				if (done) return;
-
-				RES const err = fn(fs, path);
-
-				if (err == ok) { done = true; result = ok; }
-
-				if (err != no_entry && err != no_perm) result = err;
-
-				if (err == no_perm) { permission_denied = true; };
-			});
-
-			if (done && result == ok) return ok;
-			if (permission_denied)    return no_perm;
-			return no_entry;
-		}
-
 		/*
 		 * Accumulate number of directory entries that match in any of
 		 * our sub file systems.
@@ -286,16 +229,16 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 					.device            = (addr_t)this,
 					.modification_time = { },
 				};
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			/*
 			 * The given path refers to one of our sub directories.
 			 * Propagate the request into our file systems.
 			 */
-			Stat_result result = STAT_ERR_NO_ENTRY;
+			Stat_result result = Stat_result::DENIED;
 			_for_each_fs([&] (Fs &fs) {
-				if (result == STAT_ERR_NO_ENTRY)
+				if (result == Stat_result::DENIED)
 					result = fs.stat(path, out); });
 
 			return result;
@@ -441,20 +384,27 @@ class Genode::Vfs::Union_file_system : public File_system, public Parent_fs
 
 		Unlink_result unlink(char const *path) override
 		{
-			auto unlink_fn = [] (File_system &fs, char const *path)
-			{
-				return fs.unlink(path);
-			};
+			if (strlen(path) == 0)
+				return Unlink_result::DENIED;
 
-			return _dir_op(UNLINK_ERR_NO_ENTRY, UNLINK_ERR_NO_PERM, UNLINK_OK,
-			               path, unlink_fn);
+			/*
+			 * The given path refers to at least one of our sub directories.
+			 * Propagate the request into all of our file systems. If at least
+			 * one operation succeeds, we return success.
+			 */
+			Unlink_result result = Unlink_result::DENIED;
+			_for_each_fs([&] (Fs &fs) {
+				if (result == Unlink_result::DENIED)
+					result = fs.unlink(path); });
+
+			return result;
 		}
 
 		Rename_result rename(char const *from_path, char const *to_path) override
 		{
-			Rename_result result = RENAME_ERR_NO_ENTRY;
+			Rename_result result = Rename_result::DENIED;
 			_for_each_fs([&] (Fs &fs) {
-				if (result == RENAME_ERR_NO_ENTRY)
+				if (result == Rename_result::DENIED)
 					result = fs.rename(from_path, to_path); });
 
 			return result;

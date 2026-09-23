@@ -660,9 +660,9 @@ class Vfs_server::Session_component : private Session_resources,
 
 			_apply_node(node_handle, [&] (Node_base &node) {
 
-				Directory_service::Stat vfs_stat;
+				Vfs::File_system::Stat vfs_stat;
 
-				if (_vfs_env.fs().stat(node.path.string(), vfs_stat) != Directory_service::STAT_OK)
+				if (_vfs_env.fs().stat(node.path.string(), vfs_stat) != Stat_result::OK)
 					throw Invalid_handle();
 
 				auto fs_node_type = [&] (Vfs::Dirent_type type)
@@ -678,7 +678,7 @@ class Vfs_server::Session_component : private Session_resources,
 					return To::CONTINUOUS_FILE;
 				};
 
-				auto fs_node_size = [&] (Vfs::Directory_service::Stat const &vfs_stat)
+				auto fs_node_size = [&] (Vfs::File_system::Stat const &vfs_stat)
 				{
 					switch (vfs_stat.type) {
 					case Vfs::Dirent_type::DIRECTORY:

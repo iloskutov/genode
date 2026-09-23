@@ -23,7 +23,6 @@
 #include <genode_c_api/socket.h>
 #include <net/ipv4.h>
 #include <util/string.h>
-#include <vfs/directory_service.h>
 #include <timer_session/connection.h>
 
 #include "vfs_ip.h"
@@ -218,7 +217,7 @@ struct Vfs_ip::Directory : Vfs_ip::Node
 	virtual Vfs_ip::Node *child(char const *) = 0;
 	virtual unsigned num_dirent()             = 0;
 
-	using Open_attr = Directory_service::Open_attr;
+	using Open_attr = File_system::Open_attr;
 
 	virtual Open_result open(File_system &fs, char const *, Open_attr, Allocator &) = 0;
 
@@ -875,7 +874,7 @@ class Vfs_ip::Ip_error_file : public Vfs_ip::File
 			File(name), _error_fs(parent_fs)
 		{ }
 
-		using Open_attr = Directory_service::Open_attr;
+		using Open_attr = File_system::Open_attr;
 
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) {
 			return _error_fs.open(path, attr, alloc); }
@@ -900,8 +899,8 @@ class Vfs_ip::Ip_sockopt_dir : public Vfs_ip::Directory
 
 		Vfs_ip::Node *child(char const *name) override
 		{
-			Directory_service::Stat out;
-			if (_sockopt_fs.stat(name, out) == Directory_service::STAT_OK) {
+			File_system::Stat out;
+			if (_sockopt_fs.stat(name, out) == Stat_result::OK) {
 				/* sockopts directory */
 				if (out.type == Dirent_type::DIRECTORY) return this;
 
@@ -1102,7 +1101,7 @@ class Vfs_ip::Ip_socket_dir final : public Socket_dir
 		long read(Byte_range_ptr const &dst,
 		          file_size seek_offset) override
 		{
-			using Dirent = Directory_service::Dirent;
+			using Dirent = Vfs::File_system::Dirent;
 
 			if (dst.num_bytes < sizeof(Dirent))
 				return -1;
@@ -1324,19 +1323,19 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 			return nullptr;
 		}
 
-		Vfs_ip::Directory_service::Unlink_result unlink(char const *path)
+		Unlink_result unlink(char const *path)
 		{
 			Vfs_ip::Node *node = lookup(path);
-			if (!node) return Directory_service::UNLINK_ERR_NO_ENTRY;
+			if (!node) return Unlink_result::DENIED;
 
 			Vfs_ip::Directory *dir = dynamic_cast<Vfs_ip::Directory*>(node);
-			if (!dir) return Directory_service::UNLINK_ERR_NO_ENTRY;
+			if (!dir) return Unlink_result::DENIED;
 
 			_free_node(node);
 
 			destroy(&_alloc, dir);
 
-			return Directory_service::UNLINK_OK;
+			return Unlink_result::OK;
 		}
 
 		/****************************
@@ -1397,7 +1396,7 @@ class Vfs_ip::Protocol_dir_impl : public Protocol_dir
 
 		long read(Byte_range_ptr const &dst, file_size seek_offset) override
 		{
-			using Dirent = Directory_service::Dirent;
+			using Dirent = Vfs::File_system::Dirent;
 
 			if (dst.num_bytes < sizeof(Dirent))
 				return -1;
@@ -1690,7 +1689,7 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 
 		unsigned num_dirent() override { return 7; }
 
-		using Open_attr = Directory_service::Open_attr;
+		using Open_attr = Vfs::File_system::Open_attr;
 
 		Open_result open(File_system &, char const *, Open_attr, Allocator &) override
 		{
@@ -1739,14 +1738,10 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 
 		Vfs_ip::Node *child(char const *) override { return nullptr; }
 
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Stat_result stat(char const *path, Stat &out) override
 		{
 			Node *node = _lookup(path);
-			if (!node) return STAT_ERR_NO_ENTRY;
+			if (!node) return Stat_result::DENIED;
 
 			out = { };
 
@@ -1754,31 +1749,31 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 				out.type = Dirent_type::DIRECTORY;
 				out.rwx  = Node_rwx::rwx();
 				out.size = 1;
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			if (dynamic_cast<Ip_data_file*>(node)) {
 				out.type = Dirent_type::CONTINUOUS_FILE;
 				out.rwx  = Node_rwx::rw();
 				out.size = 0;
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			if (dynamic_cast<Ip_peek_file*>(node)) {
 				out.type = Dirent_type::CONTINUOUS_FILE;
 				out.rwx  = Node_rwx::rw();
 				out.size = 0;
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			if (dynamic_cast<Vfs_ip::File*>(node)) {
 				out.type = Dirent_type::TRANSACTIONAL_FILE;
 				out.rwx  = Node_rwx::rw();
 				out.size = 0x1000;  /* there may be something to read */
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
-			return STAT_ERR_NO_ENTRY;
+			return Stat_result::DENIED;
 		}
 
 		unsigned num_dirent(char const *path) override
@@ -1848,11 +1843,8 @@ class Vfs_ip::Ip_file_system : public  Vfs::File_system,
 				return _tcp_dir.unlink(&path[3]);
 			if (strcmp(path, "udp", 3) == 0)
 				return _udp_dir.unlink(&path[3]);
-			return UNLINK_ERR_NO_ENTRY;
+			return Unlink_result::DENIED;
 		}
-
-		Rename_result rename(char const *, char const *) override {
-			return RENAME_ERR_NO_PERM; }
 };
 
 

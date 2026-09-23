@@ -61,13 +61,13 @@ struct Framebuffer::Vfs_request_handler : Lx_kit::Firmware_request_handler
 
 	static size_t query_file_length(Vfs::Root &root, char const *file_path)
 	{
-		using DS = Vfs::Directory_service;
-		using SR = DS::Stat_result;
+		using FS = Vfs::File_system;
+		using SR = Vfs::Stat_result;
 
 		size_t length = 0;
 
-		DS::Stat stat { };
-		if (root.fs().stat(file_path, stat) == SR::STAT_OK) {
+		FS::Stat stat { };
+		if (root.fs().stat(file_path, stat) == SR::OK) {
 			length = (size_t)stat.size;
 		}
 

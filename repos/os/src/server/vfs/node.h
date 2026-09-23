@@ -539,7 +539,7 @@ class Vfs_server::File : public Io_node, public Vfs::Read_ready_response_handler
 
 		Vfs::File_handle _handle;
 
-		using Stat = Directory_service::Stat;
+		using Stat = Vfs::File_system::Stat;
 
 		bool _warned_once = false;
 
@@ -669,9 +669,8 @@ class Vfs_server::File : public Io_node, public Vfs::Read_ready_response_handler
 			if (_writeable) {
 				_modified = true; /* might be closed after created empty */
 
-				using Result = Directory_service::Stat_result;
-				Vfs::Directory_service::Stat stat { };
-				if (env.fs().stat(path.string(), stat) == Result::STAT_OK)
+				Vfs::File_system::Stat stat { };
+				if (env.fs().stat(path.string(), stat) == Stat_result::OK)
 					_write_type = (stat.type == Vfs::Dirent_type::CONTINUOUS_FILE)
 					            ? Write_type::CONTINUOUS : Write_type::TRANSACTIONAL;
 			}
@@ -762,7 +761,7 @@ struct Vfs_server::Directory : Io_node
 
 		Vfs::Dir_handle _handle;
 
-		using Vfs_dirent = Directory_service::Dirent;
+		using Vfs_dirent = Vfs::File_system::Dirent;
 		using Fs_dirent  = ::File_system::Directory_entry;
 
 		bool _position_and_length_aligned_with_dirent_size()

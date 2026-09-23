@@ -229,11 +229,6 @@ class Vfs_audit::File_system : public Vfs::File_system
 
 		void destruct() override { destroy(_alloc, this); }
 
-
-		/***********************
-		 ** Directory service **
-		 ***********************/
-
 		Dataspace_capability dataspace(const char *path) override
 		{
 			_log(__func__, " ", path);
@@ -283,7 +278,7 @@ class Vfs_audit::File_system : public Vfs::File_system
 				[&] (Opendir_error e) -> Opendir_result { return e; });
 		}
 
-		Stat_result stat(const char *path, Vfs::Directory_service::Stat &buf) override
+		Stat_result stat(const char *path, Vfs::File_system::Stat &buf) override
 		{
 			_log(__func__, " ", path);
 			return _fs.stat(_expand(path).string(), buf);

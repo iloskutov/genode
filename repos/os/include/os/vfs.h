@@ -54,7 +54,7 @@ struct Genode::Directory : Noncopyable, Interface
 		{
 			private:
 
-				Vfs::Directory_service::Dirent _dirent { };
+				Vfs::File_system::Dirent _dirent { };
 
 				friend class Directory;
 
@@ -67,7 +67,7 @@ struct Genode::Directory : Noncopyable, Interface
 				void print(Output &out) const
 				{
 					using Genode::print;
-					using Vfs::Directory_service;
+					using Vfs::File_system;
 
 					print(out, _dirent.name.buf, " (");
 					switch (_dirent.type) {
@@ -80,7 +80,7 @@ struct Genode::Directory : Noncopyable, Interface
 					print(out, ")");
 				}
 
-				using Name = String<Vfs::Directory_service::Dirent::Name::MAX_LEN>;
+				using Name = String<Vfs::File_system::Dirent::Name::MAX_LEN>;
 
 				Name name() const { return Name(Cstring(_dirent.name.buf)); }
 
@@ -141,8 +141,7 @@ struct Genode::Directory : Noncopyable, Interface
 			return const_cast<Vfs::File_system &>(_fs);
 		}
 
-		Vfs::Directory_service::Stat_result _stat(Path const &rel_path,
-		                                          Vfs::Directory_service::Stat &out) const
+		Vfs::Stat_result _stat(Path const &rel_path, Vfs::File_system::Stat &out) const
 		{
 			if (rel_path == "")
 				return _nonconst_fs().stat(_path.string(), out);
@@ -234,9 +233,9 @@ struct Genode::Directory : Noncopyable, Interface
 
 		bool file_exists(Path const &rel_path) const
 		{
-			Vfs::Directory_service::Stat stat { };
+			Vfs::File_system::Stat stat { };
 
-			if (_stat(rel_path, stat) != Vfs::Directory_service::STAT_OK)
+			if (_stat(rel_path, stat) != Vfs::Stat_result::OK)
 				return false;
 
 			return stat.type == Vfs::Dirent_type::TRANSACTIONAL_FILE
@@ -245,9 +244,9 @@ struct Genode::Directory : Noncopyable, Interface
 
 		bool directory_exists(Path const &rel_path) const
 		{
-			Vfs::Directory_service::Stat stat { };
+			Vfs::File_system::Stat stat { };
 
-			if (_stat(rel_path, stat) != Vfs::Directory_service::STAT_OK)
+			if (_stat(rel_path, stat) != Vfs::Stat_result::OK)
 				return false;
 
 			return stat.type == Vfs::Dirent_type::DIRECTORY;
@@ -255,9 +254,9 @@ struct Genode::Directory : Noncopyable, Interface
 
 		bool symlink_exists(Path const &rel_path) const
 		{
-			Vfs::Directory_service::Stat stat { };
+			Vfs::File_system::Stat stat { };
 
-			if (_stat(rel_path, stat) != Vfs::Directory_service::STAT_OK)
+			if (_stat(rel_path, stat) != Vfs::Stat_result::OK)
 				return false;
 
 			return stat.type == Vfs::Dirent_type::SYMLINK;
@@ -265,8 +264,8 @@ struct Genode::Directory : Noncopyable, Interface
 
 		bool entry_exists(Path const &rel_path) const
 		{
-			Vfs::Directory_service::Stat stat { };
-			return _stat(rel_path, stat) == Vfs::Directory_service::STAT_OK;
+			Vfs::File_system::Stat stat { };
+			return _stat(rel_path, stat) == Vfs::Stat_result::OK;
 		}
 
 		/**
@@ -278,9 +277,9 @@ struct Genode::Directory : Noncopyable, Interface
 		 */
 		Vfs::file_size file_size(Path const &rel_path) const
 		{
-			Vfs::Directory_service::Stat stat { };
+			Vfs::File_system::Stat stat { };
 
-			if (_stat(rel_path, stat) != Vfs::Directory_service::STAT_OK)
+			if (_stat(rel_path, stat) != Vfs::Stat_result::OK)
 				throw Nonexistent_file();
 
 			if (stat.type == Vfs::Dirent_type::TRANSACTIONAL_FILE
@@ -790,8 +789,8 @@ class Genode::Append_file : public Writeable_file
 		:
 			Writeable_file(dir, path, ts)
 		{
-			Vfs::Directory_service::Stat stat { };
-			if (dir._stat(path, stat) == Vfs::Directory_service::STAT_OK)
+			Vfs::File_system::Stat stat { };
+			if (dir._stat(path, stat) == Vfs::Stat_result::OK)
 				_at.pos = stat.size;
 		}
 

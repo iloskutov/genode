@@ -177,11 +177,6 @@ class Vfs_log::File_system : public Single_file_system
 			_log(_log_session(env.env()))
 		{ }
 
-
-		/*********************************
-		 ** Directory service interface **
-		 *********************************/
-
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))

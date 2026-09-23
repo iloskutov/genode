@@ -388,16 +388,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 			}
 		}
 
-		/***************************
-		 ** File_system interface **
-		 ***************************/
-
 		void destruct() override { destroy(_env.alloc(), this); }
-
-
-		/*********************************
-		 ** Directory service interface **
-		 *********************************/
 
 		Dataspace_capability dataspace(char const *path) override
 		{
@@ -583,7 +574,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 		Stat_result stat(char const *path, Stat &stat)
 		{
 			struct stat sb { };
-			if (rump_sys_lstat(path, &sb) != 0) return STAT_ERR_NO_ENTRY;
+			if (rump_sys_lstat(path, &sb) != 0) return Stat_result::DENIED;
 
 			auto type = [] (unsigned mode)
 			{
@@ -606,39 +597,41 @@ class Vfs_rump::File_system : public Vfs::File_system
 					                          sb.st_mtim.tv_nsec/1000000) }
 			};
 
-			return STAT_OK;
+			return Stat_result::OK;
 		}
 
 		Unlink_result unlink(char const *path) override
 		{
 			struct stat s;
 			if (rump_sys_lstat(path, &s) == -1)
-				return UNLINK_ERR_NO_ENTRY;
+				return Unlink_result::DENIED;
 
 			int const r = S_ISDIR(s.st_mode)
 				? rump_sys_rmdir(path)
 				: rump_sys_unlink(path);
 
 			if (r != 0) switch (errno) {
-			case ENOENT:    return UNLINK_ERR_NO_ENTRY;
-			case ENOTEMPTY: return UNLINK_ERR_NOT_EMPTY;
 			default:
 				error(__func__, ": unhandled rump error ", errno);
-				return UNLINK_ERR_NO_PERM;
+				[[fallthrough]];
+			case ENOENT:
+			case ENOTEMPTY:
+				return Unlink_result::DENIED;
 			}
 
 			_notify_watchers(path);
 			_notify_compound_dir_watchers(path);
 
-			return UNLINK_OK;
+			return Unlink_result::OK;
 		}
 
 		Rename_result rename(char const *from, char const *to) override
 		{
 			if (rump_sys_rename(from, to) != 0) switch (errno) {
-			case ENOENT: return RENAME_ERR_NO_ENTRY;
-			case EXDEV:  return RENAME_ERR_CROSS_FS;
-			case EACCES: return RENAME_ERR_NO_PERM;
+			case ENOENT:
+			case EXDEV:
+			case EACCES:
+				return Rename_result::DENIED;
 			}
 
 			_notify_watchers(from);
@@ -646,7 +639,7 @@ class Vfs_rump::File_system : public Vfs::File_system
 			_notify_compound_dir_watchers(from);
 			_notify_compound_dir_watchers(to);
 
-			return RENAME_OK;
+			return Rename_result::OK;
 		}
 
 		Mkdir_result mkdir(char const *path, Timestamp) override

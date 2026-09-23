@@ -89,8 +89,6 @@ struct Libc::Fs
 	using size_t = ::size_t;
 	using At = Vfs::At;
 
-	void destroy_vfs_handle(Vfs::Vfs_handle &);
-
 	int     access  (char const *, int);
 	int     stat    (char const *, struct stat &);
 	int     mkdir   (char const *, mode_t);

@@ -132,11 +132,6 @@ class Vfs_rom::File_system : public Single_file_system
 			_binary(config.attribute_value("binary", true))
 		{ }
 
-
-		/*********************************
-		 ** Directory-service interface **
-		 ********************************/
-
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (attr.writeable || !_single_file(path))

@@ -113,17 +113,11 @@ inline void assert_read(Vfs::File_channel::Read_result r)
 	});
 }
 
-inline void assert_unlink(Vfs::Directory_service::Unlink_result r)
+inline void assert_unlink(Vfs::Unlink_result r)
 {
-	using Result = Vfs::Directory_service::Unlink_result;
 	switch (r) {
-	case Result::UNLINK_OK: return;
-	case Result::UNLINK_ERR_NO_ENTRY:
-		error("UNLINK_ERR_NO_ENTRY"); break;
-	case Result::UNLINK_ERR_NO_PERM:
-		error("UNLINK_ERR_NO_PERM"); break;
-	case Result::UNLINK_ERR_NOT_EMPTY:
-		error("UNLINK_ERR_NOT_EMPTY"); break;
+	case Vfs::Unlink_result::OK:     return;
+	case Vfs::Unlink_result::DENIED: error("Unlink_result::DENIED"); break;
 	}
 	throw Exception();
 }
@@ -459,7 +453,7 @@ struct Unlink_test : public Stress_test
 		vfs.opendir(path, alloc).with_result(
 			[&] (Vfs::Dir_channel &channel) {
 
-				Vfs::Directory_service::Dirent dirent { };
+				Vfs::File_system::Dirent dirent { };
 				for (unsigned i = vfs.num_dirent(path); i;) {
 					--i;
 
@@ -517,17 +511,17 @@ struct Unlink_test : public Stress_test
 	:
 		Stress_test(vfs, alloc, parent), _io(io)
 	{
-		using Result = Vfs::Directory_service::Unlink_result;
+		using Result = Vfs::Unlink_result;
 		try {
 			Result r = vfs.unlink(path.base());
 			switch (r) {
-			case Result::UNLINK_ERR_NOT_EMPTY:
+			case Result::DENIED:
 				log("recursive unlink not supported");
 				empty_dir(path.base());
 				r = vfs.unlink(path.base());
 				[[fallthrough]];
 
-			case Result::UNLINK_OK:
+			case Result::OK:
 				log("recursive unlink supported");
 				++count;
 				return;

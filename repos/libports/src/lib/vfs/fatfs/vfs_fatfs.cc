@@ -525,17 +525,17 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				} else {
 					stat.size = info.fsize;
 				}
-				return STAT_OK;
+				return Stat_result::OK;
 
 			case FR_NO_FILE:
 			case FR_NO_PATH:
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 
 			default:
 				error("unhandled FatFS::f_stat error ", (int)err);
-				return STAT_ERR_NO_PERM;
+				return Stat_result::DENIED;
 			}
-			return STAT_ERR_NO_PERM;
+			return Stat_result::DENIED;
 		}
 
 		Unlink_result unlink(char const *path) override
@@ -549,12 +549,12 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			switch (f_unlink((const TCHAR*)path)) {
 			case FR_OK: break;
 			case FR_NO_FILE:
-			case FR_NO_PATH: return UNLINK_ERR_NO_ENTRY;
-			default:         return UNLINK_ERR_NO_PERM;
+			case FR_NO_PATH: return Unlink_result::DENIED;
+			default:         return Unlink_result::DENIED;
 			}
 
 			_notify_parent_of(path);
-			return UNLINK_OK;
+			return Unlink_result::OK;
 		}
 
 		Rename_result rename(char const *from, char const *to) override
@@ -567,7 +567,7 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 				FILINFO info;
 				if (FR_OK == f_stat((TCHAR const *)to, &info)) {
 					if (info.fattrib & AM_DIR) {
-						return RENAME_ERR_NO_PERM;
+						return Rename_result::DENIED;
 					} else {
 						f_unlink((TCHAR const *)to);
 					}
@@ -582,14 +582,14 @@ class Vfs_fatfs::File_system : public Vfs::File_system
 			switch (f_rename((const TCHAR*)from, (const TCHAR*)to)) {
 			case FR_OK: break;
 			case FR_NO_FILE:
-			case FR_NO_PATH: return RENAME_ERR_NO_ENTRY;
-			default:         return RENAME_ERR_NO_PERM;
+			case FR_NO_PATH: return Rename_result::DENIED;
+			default:         return Rename_result::DENIED;
 			}
 
 			_notify_parent_of(from);
 			if (strcmp(from, to) != 0)
 				_notify_parent_of(to);
-			return RENAME_OK;
+			return Rename_result::OK;
 		}
 
 		Mkdir_result mkdir(char const *path, Timestamp) override

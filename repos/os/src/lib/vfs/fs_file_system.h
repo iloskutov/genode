@@ -735,10 +735,6 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			_fs.sigh(_signal_handler);
 		}
 
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Stat_result stat(char const *path, Stat &out) override
 		{
 			::File_system::Status status;
@@ -750,13 +746,13 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			}
 			catch (Out_of_ram)  {
 				error("out-of-ram during stat");
-				return STAT_ERR_NO_PERM;
+				return Stat_result::DENIED;
 			}
 			catch (Out_of_caps) {
 				error("out-of-caps during stat");
-				return STAT_ERR_NO_PERM;
+				return Stat_result::DENIED;
 			}
-			catch (...) { return STAT_ERR_NO_ENTRY; }
+			catch (...) { return Stat_result::DENIED; }
 
 			out = Stat();
 
@@ -767,7 +763,7 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 			out.modification_time = {
 				.ms_since_1970 = status.modification_time.ms_since_1970 };
 
-			return STAT_OK;
+			return Stat_result::OK;
 		}
 
 		Unlink_result unlink(char const *path) override
@@ -783,21 +779,22 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 				Fs_handle_guard dir_guard(*this, dir);
 
 				_fs.unlink(dir, file_name.base() + 1);
+				return Unlink_result::OK;
 			}
-			catch (::File_system::Invalid_handle)    { return UNLINK_ERR_NO_ENTRY;  }
-			catch (::File_system::Invalid_name)      { return UNLINK_ERR_NO_ENTRY;  }
-			catch (::File_system::Lookup_failed)     { return UNLINK_ERR_NO_ENTRY;  }
-			catch (::File_system::Not_empty)         { return UNLINK_ERR_NOT_EMPTY; }
-			catch (::File_system::Permission_denied) { return UNLINK_ERR_NO_PERM;   }
-			catch (::File_system::Unavailable)       { return UNLINK_ERR_NO_ENTRY;  }
+			catch (::File_system::Invalid_handle)    { }
+			catch (::File_system::Invalid_name)      { }
+			catch (::File_system::Lookup_failed)     { }
+			catch (::File_system::Not_empty)         { }
+			catch (::File_system::Permission_denied) { }
+			catch (::File_system::Unavailable)       { }
 
-			return UNLINK_OK;
+			return Unlink_result::DENIED;
 		}
 
 		Rename_result rename(char const *from_path, char const *to_path) override
 		{
 			if ((strcmp(from_path, to_path) == 0) && dir_entry_exists(from_path))
-				return RENAME_OK;
+				return Rename_result::OK;
 
 			Absolute_path from_dir_path(from_path);
 			from_dir_path.strip_last_element();
@@ -823,11 +820,11 @@ class Vfs_fs::File_system : public Vfs::File_system, private Remote_io
 
 				_fs.move(from_dir, from_file_name.base() + 1,
 				         to_dir,   to_file_name.base() + 1);
-			}
-			catch (::File_system::Lookup_failed) { return RENAME_ERR_NO_ENTRY; }
-			catch (...)                          { return RENAME_ERR_NO_PERM; }
 
-			return RENAME_OK;
+				return Rename_result::OK;
+			}
+			catch (...) { }
+			return Rename_result::DENIED;
 		}
 
 		Mkdir_result mkdir(char const *path, Timestamp ts) override

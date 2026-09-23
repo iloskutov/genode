@@ -594,13 +594,11 @@ class Vfs_tresor_trust_anchor::Trust_anchor
 			Path file_path = path;
 			file_path.append_element(key_file_name.string());
 
-			using Stat_result = Vfs::Directory_service::Stat_result;
-
-			Vfs::Directory_service::Stat out_stat { };
+			Vfs::File_system::Stat out_stat { };
 			Stat_result const stat_res =
 				_vfs_env.fs().stat(file_path.string(), out_stat);
 
-			if (stat_res == Stat_result::STAT_OK) {
+			if (stat_res == Stat_result::OK) {
 
 				_state = State::INITIALIZED;
 				return true;

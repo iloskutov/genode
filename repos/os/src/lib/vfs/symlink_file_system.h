@@ -110,10 +110,9 @@ class Vfs_symlink::File_system : public Single_file_system
 			if (_single_file(path)) {
 				out.type = Dirent_type::SYMLINK,
 				out.rwx  = Node_rwx::ro();
-			} else {
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::OK;
 			}
-			return STAT_OK;
+			return Stat_result::DENIED;
 		}
 
 		static constexpr auto BUILTIN_FS_TYPE = "symlink";

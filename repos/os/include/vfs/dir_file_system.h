@@ -177,11 +177,11 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 					.device            = (addr_t)this,
 					.modification_time = { },
 				};
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 			return _with_sub_path(path,
 				[&] (auto const &path) { return _union.stat(path, out); },
-				[&] () -> Stat_result  { return STAT_ERR_NO_ENTRY; });
+				[&] () -> Stat_result  { return Stat_result::DENIED; });
 		}
 
 		unsigned num_dirent(char const *path) override
@@ -256,18 +256,18 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 		Unlink_result unlink(char const *path) override
 		{
 			if (_slash(path))
-				return UNLINK_ERR_NO_PERM;
+				return Unlink_result::DENIED;
 
 			return _with_sub_path(path,
 				[&] (auto const &path)  { return _union.unlink(path); },
-				[&] () -> Unlink_result { return UNLINK_ERR_NO_ENTRY; });
+				[&] () -> Unlink_result { return Unlink_result::DENIED; });
 		}
 
 		Rename_result rename(char const *from_path, char const *to_path) override
 		{
 			/* deny renaming a path in the static VFS configuration */
 			if (_slash(from_path))
-				return RENAME_ERR_NO_PERM;
+				return Rename_result::DENIED;
 
 			return _with_sub_path(from_path,
 				[&] (auto const &from_path) {
@@ -277,10 +277,10 @@ class Genode::Vfs::Dir_file_system : public File_system, public Parent_fs
 						},
 						[&] () -> Rename_result {
 							/* both paths must reside within the same file system */
-							return RENAME_ERR_CROSS_FS;
+							return Rename_result::DENIED;
 						});
 				},
-				[&] () -> Rename_result { return RENAME_ERR_NO_ENTRY; });
+				[&] () -> Rename_result { return Rename_result::DENIED; });
 		}
 
 		Mkdir_result mkdir(char const *path, Timestamp ts) override

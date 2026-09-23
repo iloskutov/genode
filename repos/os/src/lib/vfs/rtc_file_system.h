@@ -122,11 +122,6 @@ class Vfs_rtc::File_system : public Single_file_system
 			_rtc.set_sigh(_set_signal_handler);
 		}
 
-
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			if (attr.writeable || !_single_file(path))
@@ -141,7 +136,7 @@ class Vfs_rtc::File_system : public Single_file_system
 		{
 			Stat_result result = Single_file_system::stat(path, out);
 
-			if (result == STAT_OK) {
+			if (result == Stat_result::OK) {
 				out.size = TIMESTAMP_LEN;
 			}
 

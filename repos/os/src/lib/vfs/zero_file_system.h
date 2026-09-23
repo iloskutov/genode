@@ -80,10 +80,6 @@ struct Vfs_zero::File_system : Single_file_system
 		void destruct() override { destroy(_alloc, this); }
 	};
 
-	/*********************************
-	 ** Directory service interface **
-	 *********************************/
-
 	Open_result open(char const *path, Open_attr, Allocator &alloc) override
 	{
 		if (!_single_file(path))

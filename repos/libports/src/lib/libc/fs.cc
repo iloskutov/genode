@@ -74,7 +74,7 @@ static ino_t pseudo_inode_from_path(char const *path)
  *
  * Code shared between 'stat' and 'fstat'.
  */
-static void vfs_stat_to_libc_stat_struct(Genode::Vfs::Directory_service::Stat const &src,
+static void vfs_stat_to_libc_stat_struct(Genode::Vfs::File_system::Stat const &src,
                                          char const *path, struct stat &dst)
 {
 	using namespace Genode;
@@ -418,14 +418,11 @@ int Libc::Fs::stat_from_kernel(const char *path, struct stat &buf)
 	if (!path)
 		return Errno(EFAULT);
 
-	using Result = Vfs::Directory_service::Stat_result;
-
-	Vfs::Directory_service::Stat stat;
+	Vfs::File_system::Stat stat;
 
 	switch (_vfs.stat(path, stat)) {
-	case Result::STAT_ERR_NO_ENTRY: errno = ENOENT; return -1;
-	case Result::STAT_ERR_NO_PERM:  errno = EACCES; return -1;
-	case Result::STAT_OK:                           break;
+	case Vfs::Stat_result::DENIED: errno = ENOENT; return -1;
+	case Vfs::Stat_result::OK:     break;
 	}
 
 	vfs_stat_to_libc_stat_struct(stat, path, buf);
@@ -438,17 +435,14 @@ int Libc::Fs::stat(char const *path, struct stat &buf)
 	if (!path)
 		return Errno(EFAULT);
 
-	using Result = Vfs::Directory_service::Stat_result;
-
-	Vfs::Directory_service::Stat stat;
+	Vfs::File_system::Stat stat;
 
 	int result = -1;
 	int result_errno = 0;
 	_monitor.monitor([&] {
 		switch (_vfs.stat(path, stat)) {
-		case Result::STAT_ERR_NO_ENTRY: result_errno = ENOENT; break;
-		case Result::STAT_ERR_NO_PERM:  result_errno = EACCES; break;
-		case Result::STAT_OK:
+		case Vfs::Stat_result::DENIED: result_errno = ENOENT; break;
+		case Vfs::Stat_result::OK:
 			vfs_stat_to_libc_stat_struct(stat, path, buf);
 			result = 0;
 			break;
@@ -491,11 +485,9 @@ ssize_t Libc::Fs::write(File_descriptor &fd, const void *buf, ::size_t count)
 
 		auto _fd_refers_to_continuous_file = [&]
 		{
-			using Result = Vfs::Directory_service::Stat_result;
+			Vfs::File_system::Stat stat { };
 
-			Vfs::Directory_service::Stat stat { };
-
-			if (_vfs.stat(fd.path.string(), stat) != Result::STAT_OK)
+			if (_vfs.stat(fd.path.string(), stat) != Vfs::Stat_result::OK)
 				return false;
 
 			return stat.type == Vfs::Dirent_type::CONTINUOUS_FILE;
@@ -619,7 +611,7 @@ ssize_t Libc::Fs::getdirentries(Open_dir &od, char *buf, size_t nbytes, off_t *b
 	}
 
 	using Result = Vfs::Read_result;
-	using Dirent = Vfs::Directory_service::Dirent;
+	using Dirent = Vfs::File_system::Dirent;
 
 	Dirent dirent_out;
 	Result result = Vfs::Read_error::DENIED;
@@ -666,7 +658,7 @@ ssize_t Libc::Fs::getdirentries(Open_dir &od, char *buf, size_t nbytes, off_t *b
 	dirent.d_reclen = sizeof(struct dirent);
 	dirent.d_namlen = Genode::strlen(dirent.d_name);
 
-	od.pos += sizeof(Vfs::Directory_service::Dirent);
+	od.pos += sizeof(Vfs::File_system::Dirent);
 	*basep += sizeof(struct dirent);
 
 	return sizeof(struct dirent);
@@ -1747,16 +1739,12 @@ ssize_t Libc::Fs::readlink(const char *link_path, char *buf, ::size_t buf_size)
 
 int Libc::Fs::unlink(char const *path)
 {
-	using Result = Vfs::Directory_service::Unlink_result;
-
 	bool succeeded = false;
 	int result_errno = 0;
 	_monitor.monitor([&] {
 		switch (_vfs.unlink(path)) {
-		case Result::UNLINK_ERR_NO_ENTRY:  result_errno = ENOENT;    break;
-		case Result::UNLINK_ERR_NO_PERM:   result_errno = EPERM;     break;
-		case Result::UNLINK_ERR_NOT_EMPTY: result_errno = ENOTEMPTY; break;
-		case Result::UNLINK_OK:               succeeded = true;      break;
+		case Vfs::Unlink_result::DENIED: result_errno = ENOENT; break;
+		case Vfs::Unlink_result::OK:     succeeded = true;      break;
 		}
 		return Fn::COMPLETE;
 	});
@@ -1769,8 +1757,6 @@ int Libc::Fs::unlink(char const *path)
 
 int Libc::Fs::rename(char const *from_path, char const *to_path)
 {
-	using Result = Vfs::Directory_service::Rename_result;
-
 	bool succeeded = false;
 	int result_errno = false;
 	_monitor.monitor([&] {
@@ -1792,10 +1778,8 @@ int Libc::Fs::rename(char const *from_path, char const *to_path)
 		}
 
 		switch (_vfs.rename(from_path, to_path)) {
-		case Result::RENAME_ERR_NO_ENTRY: result_errno = ENOENT; break;
-		case Result::RENAME_ERR_CROSS_FS: result_errno = EXDEV;  break;
-		case Result::RENAME_ERR_NO_PERM:  result_errno = EPERM;  break;
-		case Result::RENAME_OK:       succeeded = true;   break;
+		case Vfs::Rename_result::DENIED: result_errno = ENOENT; break;
+		case Vfs::Rename_result::OK:     succeeded = true;      break;
 		}
 		return Fn::COMPLETE;
 	});
@@ -1851,7 +1835,7 @@ void *Libc::Fs::mmap(File_descriptor &fd, void *addr_in, ::size_t length,
 
 		/*
 		 * XXX attempt to obtain memory mapping via
-		 *     'Vfs::Directory_service::dataspace'.
+		 *     'Vfs::File_system::dataspace'.
 		 */
 
 		addr = mem_alloc()->alloc(length, AT_PAGE);

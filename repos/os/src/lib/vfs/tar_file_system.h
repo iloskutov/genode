@@ -521,10 +521,6 @@ class Vfs_tar::File_system : public Vfs::File_system
 			_for_each_tar_record_do(Add_node_action(_alloc, _root_node));
 		}
 
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Dataspace_capability dataspace(char const *path) override
 		{
 			Node const *node = dereference(path);
@@ -571,7 +567,7 @@ class Vfs_tar::File_system : public Vfs::File_system
 
 			Node const *node_ptr = dereference(path);
 			if (!node_ptr)
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 
 			if (!node_ptr->record) {
 				out = {
@@ -581,7 +577,7 @@ class Vfs_tar::File_system : public Vfs::File_system
 					.device            = (addr_t)this,
 					.modification_time = { }
 				};
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			Record const &record = *node_ptr->record;
@@ -611,23 +607,7 @@ class Vfs_tar::File_system : public Vfs::File_system
 				.modification_time = timestamp_from_mtime(record.mtime())
 			};
 
-			return STAT_OK;
-		}
-
-		Unlink_result unlink(char const *path) override
-		{
-			Node const *node = dereference(path);
-			if (!node)
-				return UNLINK_ERR_NO_ENTRY;
-			else
-				return UNLINK_ERR_NO_PERM;
-		}
-
-		Rename_result rename(char const *from, char const *to) override
-		{
-			if (_root_node.lookup(from) || _root_node.lookup(to))
-				return RENAME_ERR_NO_PERM;
-			return RENAME_ERR_NO_ENTRY;
+			return Stat_result::OK;
 		}
 
 		unsigned num_dirent(char const *path) override

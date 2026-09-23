@@ -136,9 +136,15 @@ namespace Genode::Vfs {
 
 	enum class Update_mtime_result { OK, RETRY, DENIED, OUT_OF_RAM, OUT_OF_CAPS };
 
-	enum class Mkdir_result       { CREATED, UPDATED, RETRY, DENIED };
+	enum class Mkdir_result   { CREATED, UPDATED, RETRY, DENIED };
 
-	enum class Symlink_result     { CREATED, UPDATED, RETRY, DENIED };
+	enum class Symlink_result { CREATED, UPDATED, RETRY, DENIED };
+
+	enum class Unlink_result { OK, DENIED };
+
+	enum class Rename_result { OK, DENIED };
+
+	enum class Stat_result   { OK, DENIED };
 
 	struct Path_elem
 	{

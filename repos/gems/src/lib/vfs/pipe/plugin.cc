@@ -355,11 +355,6 @@ class Vfs_pipe::File_system : public Vfs::File_system
 
 		File_system(Vfs::Env &env) : Vfs::File_system(Ident { "pipe" }), _env(env) { }
 
-
-		/***********************
-		 ** Directory service **
-		 ***********************/
-
 		Open_result open(char const *cpath, Open_attr attr, Allocator &alloc) override
 		{
 			/* distinguish reader from writer depending on the access mode */
@@ -404,9 +399,9 @@ class Vfs_pipe::File_system : public Vfs::File_system
 			out = Stat { };
 
 			if (!_valid_path(cpath))
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 
-			Stat_result result { STAT_ERR_NO_ENTRY };
+			Stat_result result { Stat_result::DENIED };
 			Path const path { cpath };
 
 			if (path.has_single_element()) {
@@ -419,7 +414,7 @@ class Vfs_pipe::File_system : public Vfs::File_system
 						.device            = addr_t(this),
 						.modification_time = { }
 					};
-					result = STAT_OK;
+					result = Stat_result::OK;
 				}
 			} else {
 				/* find out if the last element is "/in" or "/out" */
@@ -437,7 +432,7 @@ class Vfs_pipe::File_system : public Vfs::File_system
 								.device            = addr_t(this),
 								.modification_time = { }
 							};
-							result = STAT_OK;
+							result = Stat_result::OK;
 						} else
 						if (io == "/out") {
 							out = Stat {
@@ -448,7 +443,7 @@ class Vfs_pipe::File_system : public Vfs::File_system
 								.device            = addr_t(this),
 								.modification_time = { }
 							};
-							result = STAT_OK;
+							result = Stat_result::OK;
 						}
 					});
 				}
@@ -546,7 +541,7 @@ class Vfs_pipe::Pipe_file_system : public Vfs_pipe::File_system
 					.device            = addr_t(this),
 					.modification_time = { }
 				};
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			return File_system::stat(cpath, out);

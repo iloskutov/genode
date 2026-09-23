@@ -522,11 +522,6 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 			_vfs_env(vfs_env), _parent_fs(parent_fs), _key_reg(*this, vfs_env.alloc(), crypto)
 		{ }
 
-
-		/*********************************
-		 ** Directory service interface **
-		 *********************************/
-
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{
 			_key_reg.update(_vfs_env);
@@ -562,7 +557,7 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 
 			/* path does not match directory name */
 			if (!path) {
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 			}
 
 			/*
@@ -572,11 +567,11 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 			if (strlen(path) == 0 || _top_dir(path)) {
 				out_stat.type   = Dirent_type::DIRECTORY;
 				out_stat.device = (addr_t)this;
-				return STAT_OK;
+				return Stat_result::OK;
 			}
 
 			if (!path || path[0] != '/') {
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 			}
 
 			try {
@@ -585,17 +580,7 @@ class Vfs_tresor_crypto::Keys_file_system : public Vfs::File_system, public Vfs:
 				return res;
 			} catch (Key_registry::Invalid_path) { }
 
-			return STAT_ERR_NO_ENTRY;
-		}
-
-		Unlink_result unlink(char const *) override
-		{
-			return UNLINK_ERR_NO_PERM;
-		}
-
-		Rename_result rename(char const *, char const *) override
-		{
-			return RENAME_ERR_NO_PERM;
+			return Stat_result::DENIED;
 		}
 
 		unsigned num_dirent(char const *path) override

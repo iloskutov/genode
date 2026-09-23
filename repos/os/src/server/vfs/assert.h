@@ -15,7 +15,7 @@
 #define _VFS__ASSERT_H_
 
 /* Genode includes */
-#include <vfs/directory_service.h>
+#include <vfs/file_system.h>
 #include <file_system_session/file_system_session.h>
 
 namespace File_system {
@@ -52,35 +52,27 @@ namespace File_system {
 		}
 	}
 
-	static inline void assert_unlink(Directory_service::Unlink_result r)
+	static inline void assert_unlink(Unlink_result r)
 	{
-		using Result = Directory_service::Unlink_result;
 		switch (r) {
-		case Result::UNLINK_ERR_NO_ENTRY:  throw Lookup_failed();
-		case Result::UNLINK_ERR_NO_PERM:   throw Permission_denied();
-		case Result::UNLINK_ERR_NOT_EMPTY: throw Not_empty();
-		case Result::UNLINK_OK: break;
+		case Unlink_result::DENIED: throw Lookup_failed();
+		case Unlink_result::OK:     break;
 		}
 	}
 
-	static inline void assert_stat(Directory_service::Stat_result r)
+	static inline void assert_stat(Stat_result r)
 	{
-		using Result = Directory_service::Stat_result;
 		switch (r) {
-		case Result::STAT_ERR_NO_ENTRY: throw Lookup_failed();
-		case Result::STAT_ERR_NO_PERM:  throw Permission_denied();
-		case Result::STAT_OK: break;
+		case Stat_result::DENIED: throw Lookup_failed();
+		case Stat_result::OK:     break;
 		}
 	}
 
-	static inline void assert_rename(Directory_service::Rename_result r)
+	static inline void assert_rename(Rename_result r)
 	{
-		using Result = Directory_service::Rename_result;
 		switch (r) {
-		case Result::RENAME_ERR_NO_ENTRY: throw Lookup_failed();
-		case Result::RENAME_ERR_CROSS_FS: throw Permission_denied();
-		case Result::RENAME_ERR_NO_PERM:  throw Permission_denied();
-		case Result::RENAME_OK: break;
+		case Rename_result::DENIED: throw Lookup_failed();
+		case Rename_result::OK:     break;
 		}
 	}
 }

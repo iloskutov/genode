@@ -101,9 +101,8 @@ class Vfs_block::File
 		:
 			_vfs(vfs), _view(view)
 		{
-			using DS = Vfs::Directory_service;
-
-			DS::Open_attr const attr { .writeable = info.writeable, .create = false };
+			Vfs::File_system::Open_attr const attr { .writeable = info.writeable,
+			                                         .create    = false };
 
 			_vfs.open(info.path.string(), attr, alloc).with_result(
 				[&] (Vfs::File_channel &c) { _file_channel = &c; },
@@ -113,10 +112,9 @@ class Vfs_block::File
 				}
 			);
 
-			using Stat_result = DS::Stat_result;
-			Vfs::Directory_service::Stat stat { };
-			Stat_result stat_res = _vfs.stat(info.path.string(), stat);
-			if (stat_res != Stat_result::STAT_OK) {
+			Vfs::File_system::Stat stat { };
+			Vfs::Stat_result stat_res = _vfs.stat(info.path.string(), stat);
+			if (stat_res != Vfs::Stat_result::OK) {
 				if (_file_channel) _file_channel->destruct();
 				_file_channel = nullptr;
 				error("Could not stat '", info.path.string(), "'");

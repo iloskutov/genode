@@ -148,11 +148,6 @@ class Vfs_inline::File_system : public Single_file_system
 			_data(env.alloc(), config)
 		{ }
 
-
-		/********************************
-		 ** Directory service interface **
-		 ********************************/
-
 		Open_result open(char const *path, Open_attr, Allocator &alloc) override
 		{
 			if (!_single_file(path))

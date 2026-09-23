@@ -150,12 +150,7 @@ class Vfs_tap::Data_file_system : public FS
 
 		static const char *name()   { return "data"; }
 
-
-		/*********************************
-		 ** Directory service interface **
-		 *********************************/
-
-		using Open_attr = Directory_service::Open_attr;
+		using Open_attr = Vfs::File_system::Open_attr;
 
 		Open_result open(char const *path, Open_attr attr, Allocator &alloc) override
 		{

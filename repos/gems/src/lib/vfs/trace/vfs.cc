@@ -176,7 +176,7 @@ class Vfs_trace::Trace_buffer_file_system : public Single_file_system
 		Stat_result stat(char const *path, Stat &out) override
 		{
 			Stat_result res = Single_file_system::stat(path, out);
-			if (res != STAT_OK) return res;
+			if (res != Stat_result::OK) return res;
 
 			/* update file size */
 			if (_state == TRACE)

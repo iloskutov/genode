@@ -33,8 +33,8 @@ struct Main
 	Main(Env &env) : env(env)
 	{
 		bool create = false;
-		Vfs::Directory_service::Stat stat { };
-		if (fs.stat(path.string(), stat) != Vfs::Directory_service::STAT_OK)
+		Vfs::File_system::Stat stat { };
+		if (fs.stat(path.string(), stat) != Vfs::Stat_result::OK)
 			create = true;
 
 		fs.open(path.string(), { .writeable = true, .create = create }, heap).with_result(

@@ -144,11 +144,6 @@ class Genode::Vfs::Single_file_system : public File_system
 			_parent_fs(parent_fs)
 		{ }
 
-
-		/*********************************
-		 ** Directory-service interface **
-		 *********************************/
-
 		Stat_result stat(char const *path, Stat &out) override
 		{
 			out = Stat { };
@@ -163,9 +158,9 @@ class Genode::Vfs::Single_file_system : public File_system
 				           : Dirent_type::CONTINUOUS_FILE,
 				out.rwx  = _node_rwx();
 			} else {
-				return STAT_ERR_NO_ENTRY;
+				return Stat_result::DENIED;
 			}
-			return STAT_OK;
+			return Stat_result::OK;
 		}
 
 		unsigned num_dirent(char const *path) override
@@ -199,21 +194,6 @@ class Genode::Vfs::Single_file_system : public File_system
 			}
 			catch (Out_of_ram)  { return Opendir_error::OUT_OF_RAM;  }
 			catch (Out_of_caps) { return Opendir_error::OUT_OF_CAPS; }
-		}
-
-		Unlink_result unlink(char const *path) override
-		{
-			if (_single_file(path))
-				return UNLINK_ERR_NO_PERM;
-
-			return UNLINK_ERR_NO_ENTRY;
-		}
-
-		Rename_result rename(char const *from, char const *to) override
-		{
-			if (_single_file(from) || _single_file(to))
-				return RENAME_ERR_NO_PERM;
-			return RENAME_ERR_NO_ENTRY;
 		}
 
 		Watch_result watch(char const *path) override

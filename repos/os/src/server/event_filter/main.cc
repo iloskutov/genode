@@ -224,21 +224,15 @@ struct Event_filter::Main : Source::Factory, Source::Trigger
 				_attached.with_result(
 					[&] (Env::Local_rm::Attachment const &a) {
 						Const_byte_range_ptr bytes { (char const *)a.ptr, a.num_bytes };
-						try {
-							Node node(bytes);
-							if (node.type() == type) {
-								fn(node);
-								return;
-							}
-
-							warning("unexpected <", node.type(), "> node " "in included "
-							        "ROM \"", _name, "\", expected, <", type, "> node");
-							missing_fn();
-
-						} catch (...) {
-							warning("ROM \"", _name, "\" has invalid syntax");
-							missing_fn();
+						Node node(bytes);
+						if (node.type() == type) {
+							fn(node);
+							return;
 						}
+
+						warning("unexpected <", node.type(), "> node " "in included "
+						        "ROM \"", _name, "\", expected, <", type, "> node");
+						missing_fn();
 					},
 					[&] (Env::Local_rm::Error) { });
 			}

@@ -330,8 +330,7 @@ class Black_hole_test::Rom_test
 		:
 			_env { env }
 		{
-			String<16> const str { Cstring { _rom_ds.local_addr<char>() } };
-			if (str != "<empty/>") {
+			if (*_rom_ds.local_addr<char>() != 0) {
 				class Unexpected_rom_content { };
 				throw Unexpected_rom_content { };
 			}

@@ -42,9 +42,7 @@ class Black_hole::Rom_session : public Session_object<Genode::Rom_session>
 		Rom_session(Env &env, Resources const &resources, Label const &label)
 		:
 			Session_object(env.ep(), resources, label), _env(env)
-		{
-			copy_cstring(_ram_ds.local_addr<char>(), "<empty/>", RAM_DS_SIZE);
-		}
+		{ }
 
 		Rom_dataspace_capability dataspace() override
 		{

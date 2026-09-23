@@ -43,9 +43,7 @@ class Black_hole::Report_session : public Session_object<Report::Session>
 		Report_session(Env &env, Resources const &resources, Label const &label)
 		:
 			Session_object(env.ep(), resources, label), _env(env)
-		{
-			copy_cstring(_ram_ds.local_addr<char>(), "<empty/>", RAM_DS_SIZE);
-		}
+		{ }
 
 		Dataspace_capability dataspace() override
 		{

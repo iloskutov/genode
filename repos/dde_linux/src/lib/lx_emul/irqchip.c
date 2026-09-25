@@ -21,6 +21,7 @@
 #include <linux/irqchip.h>
 #include <../kernel/irq/internals.h>
 #include <linux/version.h>
+#include <linux/irq_work.h>
 
 
 static void dde_irq_ack(struct irq_data *d)
@@ -202,6 +203,9 @@ int lx_emul_irq_task_function(void * data)
 			}
 
 			irq_exit();
+
+			irq_work_run();
+
 			local_irq_restore(flags);
 		}
 	}

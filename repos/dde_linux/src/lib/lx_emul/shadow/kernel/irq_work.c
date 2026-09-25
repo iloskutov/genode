@@ -14,7 +14,12 @@
 #include <linux/irq_work.h>
 
 
+__attribute__((weak))
 bool irq_work_needs_cpu(void)
 {
 	return false;
 }
+
+
+__attribute__((weak))
+void irq_work_run() { }

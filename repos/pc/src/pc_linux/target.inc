@@ -69,6 +69,9 @@ LX_ENABLE += USB_PCI USB_UHCI_HCD
 # Intel display driver
 LX_ENABLE += DRM DRM_I915 DRM_XE DRM_XE_DISPLAY
 
+# Required with Intel XE DISPLAY driver on Panther Lake notebook
+LX_ENABLE += PM
+
 # required for GPIO irqchip
 LX_ENABLE += PINCTRL PINCTRL_TIGERLAKE PINCTRL_METEORLAKE
 

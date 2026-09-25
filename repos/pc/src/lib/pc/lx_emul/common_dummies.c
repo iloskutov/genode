@@ -575,3 +575,153 @@ void this_cpu_cmpxchg16b_emu(void)
 	printk("%s: this function should never be called\n", __func__);
 	lx_emul_trace_and_stop(__func__);
 }
+
+
+const char power_group_name[] = "power";
+EXPORT_SYMBOL_GPL(power_group_name);
+
+
+void rpm_sysfs_remove(struct device *dev)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+int dpm_sysfs_add(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+int dpm_sysfs_change_owner(struct device *dev, kuid_t kuid, kgid_t kgid)
+{
+       lx_emul_trace_and_stop(__func__);
+}
+
+
+void dpm_sysfs_remove(struct device *dev)
+{
+	lx_emul_trace(__func__);
+}
+
+
+int acpi_dev_pm_attach(struct device *dev, bool power_on)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+void pci_resume_bus(struct pci_bus *bus)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void *),
+                  void *userdata)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+int pci_enable_wake(struct pci_dev *dev, pci_power_t state, bool enable)
+{
+	lx_emul_trace(__func__);
+	return -EINVAL;
+}
+
+
+int pci_finish_runtime_suspend(struct pci_dev *dev)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void pci_restore_state(struct pci_dev *dev)
+{
+	lx_emul_trace(__func__);
+}
+
+
+int pci_save_state(struct pci_dev *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+void pci_d3cold_disable(struct pci_dev * dev)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void pci_pme_restore(struct pci_dev *dev)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+s32 __dev_pm_qos_resume_latency(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+#include <linux/pm_qos.h>
+
+enum pm_qos_flags_status dev_pm_qos_flags(struct device *dev, s32 mask)
+{
+	lx_emul_trace(__func__);
+	return PM_QOS_FLAGS_UNDEFINED;
+}
+
+
+int dev_pm_qos_remove_request(struct dev_pm_qos_request *req)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+int dev_pm_qos_add_request(struct device *dev, struct dev_pm_qos_request *req,
+                           enum dev_pm_qos_req_type type, s32 value)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+int dev_pm_qos_expose_flags(struct device *dev, s32 val)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+int dev_pm_qos_expose_latency_tolerance(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+void dev_pm_qos_hide_latency_tolerance(struct device *dev)
+{
+	lx_emul_trace(__func__);
+}

@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (C) 2022 Genode Labs GmbH
+ * Copyright (C) 2022-2026 Genode Labs GmbH
  *
  * This file is distributed under the terms of the GNU General Public License
  * version 2 or later.
@@ -17,6 +17,7 @@
 
 #include <linux/irq.h>
 #include <linux/pci.h>
+#include <linux/pm_runtime.h>
 #include <linux/interrupt.h>
 
 
@@ -142,6 +143,20 @@ static void pci_add_single_device_callback(void       * data,
 		printk("Error: could not add pci device %s\n", name);
 		return;
 	}
+
+	/*
+	 * pc_nic calls 'pm_runtime_suspend(parent)' during initialization.
+	 * When we set the parent pointer before 'device_add' device
+	 * probing will issue out so set it afterwards. Hopefully nobody
+	 * will attempt to access the 'bus->dev' thoroughly as it has not
+	 * been initiailized.
+	 */
+	dev->dev.parent = &bus->dev;
+
+	/* derived from pci_pm_init of linux/drivers/pci/pci.c */
+	pm_runtime_forbid    (&dev->dev);
+	pm_runtime_set_active(&dev->dev);
+	pm_runtime_enable    (&dev->dev);
 
 	lx_emul_execute_pci_fixup(dev);
 

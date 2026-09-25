@@ -52,14 +52,6 @@ void __printk_deferred_exit(void)
 }
 
 
-#include <linux/srcu.h>
-
-void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/fs.h>
 
 void __unregister_chrdev(unsigned int major,unsigned int baseminor,unsigned int count,const char * name)
@@ -590,14 +582,6 @@ void raw_spin_rq_unlock(struct rq * rq)
 #include <linux/reboot.h>
 
 enum reboot_mode reboot_mode;
-
-
-#include <linux/refcount.h>
-
-void refcount_warn_saturate(refcount_t * r,enum refcount_saturation_type t)
-{
-	lx_emul_trace_and_stop(__func__);
-}
 
 
 #include <linux/mm.h>

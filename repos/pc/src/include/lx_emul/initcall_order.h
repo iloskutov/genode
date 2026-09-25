@@ -43,6 +43,7 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_reboot_init1",
 	"__initcall_wq_sysfs_init1",
 	"__initcall_ksysfs_init1",
+	"__initcall_pm_init1",
 	"__initcall_rcu_set_runtime_mode1",
 	"__initcall_init_jiffies_clocksource1",
 	"__initcall_init_events_core_sysctls1",

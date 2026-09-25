@@ -76,14 +76,6 @@ struct sk_buff * __skb_gso_segment(struct sk_buff * skb,netdev_features_t featur
 }
 
 
-#include <linux/srcu.h>
-
-void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/printk.h>
 
 int _printk_deferred(const char * fmt,...)

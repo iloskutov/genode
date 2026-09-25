@@ -812,3 +812,10 @@ void print_dl_stats(struct seq_file *m, int cpu)
 {
 	lx_emul_trace_and_stop(__func__);
 }
+
+
+struct clk;
+bool clk_is_enabled_when_prepared(struct clk *clk)
+{
+	lx_emul_trace_and_stop(__func__);
+}

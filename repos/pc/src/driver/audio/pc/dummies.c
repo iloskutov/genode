@@ -506,3 +506,39 @@ int ___ratelimit(struct ratelimit_state * rs,const char * func)
 	lx_emul_trace(__func__);
 	return 0;
 }
+
+
+#include <linux/pinctrl/consumer.h>
+
+int pinctrl_pm_select_default_state(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+#include <linux/pinctrl/consumer.h>
+
+int pinctrl_pm_select_init_state(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+#include <linux/pinctrl/consumer.h>
+
+int pinctrl_pm_select_sleep_state(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+#include <linux/pinctrl/consumer.h>
+
+int pinctrl_pm_select_idle_state(struct device *dev)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}

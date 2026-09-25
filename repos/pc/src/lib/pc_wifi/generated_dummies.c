@@ -84,14 +84,6 @@ u64 __sock_gen_cookie(struct sock * sk)
 }
 
 
-#include <linux/srcu.h>
-
-void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/uaccess.h>
 
 unsigned long _copy_to_user(void __user * to,const void * from,unsigned long n)

@@ -1043,3 +1043,11 @@ int crypto_lskcipher_encrypt_sg(struct skcipher_request * req)
 {
 	lx_emul_trace_and_stop(__func__);
 }
+
+
+#include <linux/srcu.h>
+
+void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
+{
+	lx_emul_trace(__func__);
+}

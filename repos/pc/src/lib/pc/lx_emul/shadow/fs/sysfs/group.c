@@ -39,3 +39,24 @@ void sysfs_remove_groups(struct kobject * kobj,const struct attribute_group ** g
 {
 	lx_emul_trace(__func__);
 }
+
+
+int sysfs_merge_group(struct kobject *kobj, const struct attribute_group *grp)
+{
+	lx_emul_trace(__func__);
+	return 0;
+}
+
+
+void sysfs_unmerge_group(struct kobject *kobj, const struct attribute_group *grp)
+{
+	lx_emul_trace(__func__);
+}
+
+
+void sysfs_remove_file_from_group(struct kobject *kobj,
+                                  const struct attribute *attr,
+                                  const char *group)
+{
+	lx_emul_trace(__func__);
+}

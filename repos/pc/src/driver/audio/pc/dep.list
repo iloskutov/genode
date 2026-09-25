@@ -42,6 +42,7 @@ include/linux/btf.h
 include/linux/cfi_types.h
 include/linux/clkdev.h
 include/linux/cookie.h
+include/linux/cpuidle.h
 include/linux/device/faux.h
 include/linux/dma-buf.h
 include/linux/dma-fence.h
@@ -71,6 +72,8 @@ include/linux/pinctrl/pinconf-generic.h
 include/linux/pinctrl/pinctrl-state.h
 include/linux/pinctrl/pinctrl.h
 include/linux/platform_data/x86/soc.h
+include/linux/pm-trace.h
+include/linux/pm_clock.h
 include/linux/pnp.h
 include/linux/power_supply.h
 include/linux/proc_ns.h
@@ -151,6 +154,7 @@ include/sound/tlv.h
 include/trace/events/asoc.h
 include/trace/events/gpio.h
 include/trace/events/notifier.h
+include/trace/events/rpm.h
 include/trace/events/sof.h
 include/trace/events/sof_intel.h
 include/uapi/linux/bpf.h
@@ -165,6 +169,7 @@ include/uapi/linux/i2c.h
 include/uapi/linux/input-event-codes.h
 include/uapi/linux/input.h
 include/uapi/linux/spi/spi.h
+include/uapi/linux/suspend_ioctls.h
 include/uapi/linux/vesa.h
 include/uapi/sound/asoc.h
 include/uapi/sound/asound.h
@@ -180,6 +185,7 @@ include/video/vga.h
 include/xen/balloon.h
 include/xen/interface/hvm/start_info.h
 include/xen/xen.h
+kernel/power/power.h
 mm/vma.h
 sound/core/pcm_local.h
 sound/hda/codecs/generic.h

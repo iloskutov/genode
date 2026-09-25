@@ -223,21 +223,6 @@ int pci_request_selected_regions_exclusive(struct pci_dev *dev, int, const char 
 
 #include <linux/pci.h>
 
-void pci_restore_state(struct pci_dev *dev)
-{
-	lx_emul_trace(__func__);
-}
-
-#include <linux/pci.h>
-
-int pci_save_state(struct pci_dev *dev)
-{
-	lx_emul_trace(__func__);
-	return 0;
-}
-
-#include <linux/pci.h>
-
 void pci_disable_device(struct pci_dev *dev)
 {
 	lx_emul_trace(__func__);
@@ -256,14 +241,6 @@ int pci_disable_link_state_locked(struct pci_dev *dev, int state)
 {
 	lx_emul_trace(__func__);
 	return 0;
-}
-
-#include <linux/pci.h>
-
-int pci_enable_wake(struct pci_dev *pci_dev, pci_power_t state, bool enable)
-{
-	lx_emul_trace(__func__);
-	return -EINVAL;
 }
 
 #include <linux/pci.h>
@@ -429,4 +406,12 @@ struct genl_family netdev_nl_family;
 long strnlen_user(const char __user * str,long count)
 {
 	lx_emul_trace_and_stop(__func__);
+}
+
+
+#include <linux/srcu.h>
+
+void __srcu_read_unlock(struct srcu_struct * ssp, int idx)
+{
+	lx_emul_trace(__func__);
 }

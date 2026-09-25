@@ -7,6 +7,11 @@ drivers/base/dd.c
 drivers/base/devres.c
 drivers/base/driver.c
 drivers/base/platform.c
+drivers/base/power/clock_ops.c
+drivers/base/power/common.c
+drivers/base/power/generic_ops.c
+drivers/base/power/runtime.c
+drivers/base/power/wakeirq.c
 drivers/base/property.c
 drivers/pci/pci-driver.c
 drivers/usb/common/common.c
@@ -58,6 +63,7 @@ kernel/locking/osq_lock.c
 kernel/locking/rwsem.c
 kernel/notifier.c
 kernel/panic.c
+kernel/power/main.c
 kernel/resource.c
 kernel/sched/build_utility.c
 kernel/smpboot.c
@@ -99,6 +105,7 @@ lib/math/div64.c
 lib/math/reciprocal_div.c
 lib/radix-tree.c
 lib/rbtree.c
+lib/refcount.c
 lib/scatterlist.c
 lib/siphash.c
 lib/sort.c

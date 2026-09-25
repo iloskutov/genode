@@ -333,3 +333,11 @@ unsigned long arch_scale_cpu_capacity(int cpu)
 	lx_emul_trace_and_stop(__func__);
 }
 #endif
+
+
+#include <linux/srcu.h>
+
+void __srcu_read_unlock(struct srcu_struct * ssp,int idx)
+{
+	lx_emul_trace(__func__);
+}

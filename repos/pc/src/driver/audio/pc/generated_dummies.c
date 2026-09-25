@@ -700,22 +700,6 @@ const struct cpumask * pci_irq_get_affinity(struct pci_dev * dev,int nr)
 
 #include <linux/pci.h>
 
-void pci_restore_state(struct pci_dev * dev)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/pci.h>
-
-int pci_save_state(struct pci_dev * dev)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/pci.h>
-
 int pci_write_config_word(const struct pci_dev * dev,int where,u16 val)
 {
 	lx_emul_trace_and_stop(__func__);
@@ -826,14 +810,6 @@ void raw_spin_rq_unlock(struct rq * rq)
 #include <linux/reboot.h>
 
 enum reboot_mode reboot_mode;
-
-
-#include <linux/refcount.h>
-
-void refcount_warn_saturate(refcount_t * r,enum refcount_saturation_type t)
-{
-	lx_emul_trace_and_stop(__func__);
-}
 
 
 #include <linux/mm.h>
@@ -1143,4 +1119,3 @@ struct page * vmalloc_to_page(const void * vmalloc_addr)
 {
 	lx_emul_trace_and_stop(__func__);
 }
-

@@ -8,6 +8,11 @@ drivers/base/dd.c
 drivers/base/devres.c
 drivers/base/driver.c
 drivers/base/platform.c
+drivers/base/power/clock_ops.c
+drivers/base/power/common.c
+drivers/base/power/generic_ops.c
+drivers/base/power/runtime.c
+drivers/base/power/wakeirq.c
 drivers/base/property.c
 drivers/dma-buf/dma-buf.c
 drivers/dma-buf/dma-fence-array.c
@@ -64,6 +69,7 @@ kernel/notifier.c
 kernel/nscommon.c
 kernel/nstree.c
 kernel/panic.c
+kernel/power/main.c
 kernel/resource.c
 kernel/sched/build_utility.c
 kernel/smpboot.c

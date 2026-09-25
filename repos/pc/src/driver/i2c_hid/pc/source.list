@@ -13,6 +13,11 @@ drivers/base/driver.c
 drivers/base/firmware.c
 drivers/base/pinctrl.c
 drivers/base/platform.c
+drivers/base/power/clock_ops.c
+drivers/base/power/common.c
+drivers/base/power/generic_ops.c
+drivers/base/power/runtime.c
+drivers/base/power/wakeirq.c
 drivers/base/property.c
 drivers/base/regmap/regcache-flat.c
 drivers/base/regmap/regcache-maple.c
@@ -50,8 +55,8 @@ drivers/mfd/mfd-core.c
 drivers/pci/pci-driver.c
 drivers/pinctrl/core.c
 drivers/pinctrl/intel/pinctrl-intel.c
-drivers/pinctrl/intel/pinctrl-tigerlake.c
 drivers/pinctrl/intel/pinctrl-meteorlake.c
+drivers/pinctrl/intel/pinctrl-tigerlake.c
 drivers/pinctrl/pinconf-generic.c
 drivers/pinctrl/pinconf.c
 drivers/pinctrl/pinctrl-utils.c
@@ -74,6 +79,7 @@ kernel/locking/rwsem.c
 kernel/locking/semaphore.c
 kernel/notifier.c
 kernel/panic.c
+kernel/power/main.c
 kernel/resource.c
 kernel/sched/build_utility.c
 kernel/smpboot.c

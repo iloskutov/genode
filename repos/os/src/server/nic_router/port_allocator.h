@@ -40,9 +40,11 @@ class Net::Port_allocator
 	private:
 
 		Genode::Bit_allocator<NR_OF_PORTS> _bit_allocator    { };
-		Genode::uint16_t                   _next_port_offset { 0 };
+		Genode::uint16_t                   _next_port_offset;
 
 	public:
+
+		Port_allocator();
 
 		struct Alloc_error { };
 		using Alloc_result = Genode::Attempt<Port, Alloc_error>;

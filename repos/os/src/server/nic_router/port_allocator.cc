@@ -31,14 +31,21 @@ bool Net::dynamic_port(Port const port)
  ** Port_allocator **
  ********************/
 
+static uint16_t increment()
+{
+	return ((Genode::Trace::timestamp() >> 2) & 0b1111) + 1;
+}
+
+
 Net::Port_allocator::Alloc_result Net::Port_allocator::alloc()
 {
+	uint16_t const i = increment();
 	for (unsigned nr_of_trials { 0 };
 	     nr_of_trials < NR_OF_PORTS;
 	     nr_of_trials++) {
 
 		uint16_t const port_offset = _next_port_offset;
-		_next_port_offset = (_next_port_offset + 1) % NR_OF_PORTS;
+		_next_port_offset = (_next_port_offset + i) % NR_OF_PORTS;
 
 		if (_bit_allocator.alloc_addr(port_offset).ok())
 			return Port { (uint16_t)(port_offset + FIRST_PORT) };
@@ -57,6 +64,10 @@ void Port_allocator::free(Port const port)
 {
 	_bit_allocator.free(port.value - FIRST_PORT);
 }
+
+
+Port_allocator::Port_allocator()
+: _next_port_offset(increment()) { }
 
 
 /**************************

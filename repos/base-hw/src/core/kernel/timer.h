@@ -17,41 +17,14 @@
 /* base-hw includes */
 #include <kernel/types.h>
 #include <kernel/irq.h>
-
-/* Genode includes */
-#include <util/list.h>
+#include <kernel/timeout.h>
 
 #include <board.h>
 
 namespace Kernel {
 	class Cpu;
-	class Timeout;
 	class Timer;
 }
-
-
-/**
- * A timeout causes a kernel pass and the call of a timeout specific handle
- */
-class Kernel::Timeout : Genode::List<Timeout>::Element
-{
-	friend class Timer;
-	friend class Genode::List<Timeout>;
-
-	private:
-
-		bool   _listed     = false;
-		time_t _end        = 0;
-
-	public:
-
-		/**
-		 * Callback handle
-		 */
-		virtual void timeout_triggered() { }
-
-		virtual ~Timeout() { }
-};
 
 
 /**
@@ -74,10 +47,14 @@ class Kernel::Timer
 				void occurred() override;
 		};
 
+		Cpu                  &_cpu;
 		Board::Timer          _device;
 		Irq                   _irq;
 		time_t                _time = 0;
-		Genode::List<Timeout> _timeout_list {};
+		Timeout_list          _timeouts {};
+
+		/* a timeout was set from another CPU, the device is outdated */
+		bool                  _device_outdated { false };
 
 		void _start_one_shot(time_t const ticks);
 
@@ -91,11 +68,31 @@ class Kernel::Timer
 
 		void _schedule_timeout();
 
+		/**
+		 * Program the device for a new first timeout
+		 */
+		void _first_timeout_changed();
+
 	public:
 
 		Timer(Cpu &cpu);
 
 		void set_timeout(Timeout &timeout, time_t const duration);
+
+		/**
+		 * Move 'timeout' with its remaining ticks to timer 'to'
+		 *
+		 * The time of all timers must be the same, which holds for
+		 * a counter shared by all CPUs.
+		 */
+		void move_timeout(Timeout &timeout, Timer &to);
+
+		/**
+		 * Program the device if a timeout was set from another CPU
+		 *
+		 * Must be called by the CPU of this timer.
+		 */
+		void update_device();
 
 		time_t ticks_left(Timeout const &timeout) const {
 			return (timeout._end > time()) ? timeout._end - time() : 0; }

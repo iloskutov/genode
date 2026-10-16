@@ -16,18 +16,7 @@
 
 #include <base/log.h>
 #include <kernel/types.h>
-
-namespace Kernel {
-	class Timeout;
-	struct Timer;
-}
-
-
-struct Kernel::Timeout
-{
-	virtual void timeout_triggered() {}
-	virtual ~Timeout() { }
-};
+#include <kernel/timeout.h>
 
 
 struct Kernel::Timer

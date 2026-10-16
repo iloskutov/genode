@@ -95,9 +95,29 @@ Platform_thread::~Platform_thread()
 }
 
 
-void Platform_thread::affinity(Affinity::Location const &)
+void Platform_thread::affinity(Affinity::Location const &location)
 {
-	/* yet no migration support, don't claim wrong location, e.g. for tracing */
+	Affinity::Space const space = platform().affinity_space();
+
+	unsigned const x = (unsigned)location.xpos(),
+	               y = (unsigned)location.ypos();
+
+	if (x >= space.width() || y >= space.height()) {
+		warning("thread '", _label, "' stays at location ", _location.xpos(),
+		        "x", _location.ypos(), ", invalid location ", location.xpos(),
+		        "x", location.ypos());
+		return;
+	}
+
+	Affinity::Location const target(x, y); /* limit width/height to 1 */
+	unsigned const cpu = Platform::kernel_cpu_idx(target);
+
+	if (!Kernel::thread_migrate(*_kobj, cpu)) {
+		warning("thread '", _label, "' failed to move to CPU ", cpu);
+		return;
+	}
+
+	_location = target;
 }
 
 

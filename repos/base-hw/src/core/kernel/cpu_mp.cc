@@ -32,6 +32,9 @@ void Cpu::Ipi::occurred()
 	iterate(cpu._local_work_list);
 	iterate(cpu._pool._global_work_list);
 
+	/* program the timer for a timeout set from another CPU */
+	cpu._timer.update_device();
+
 	/* mark the IPI as being received */
 	pending = false;
 }

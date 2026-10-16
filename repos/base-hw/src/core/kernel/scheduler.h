@@ -215,6 +215,26 @@ class Kernel::Scheduler
 				void help(Context &c);
 				void helping_finished();
 
+				/**
+				 * End the helping of this context and of its helpers
+				 *
+				 * \param fn  called with each context that stopped
+				 *            helping, this one included if it helped
+				 */
+				void helping_cut(auto const &fn)
+				{
+					if (_destination) {
+						helping_finished();
+						fn(*this);
+					}
+
+					while (List_element *h = _helper_list.first()) {
+						Context &helper = *h->object();
+						helper.helping_finished();
+						fn(helper);
+					}
+				}
+
 				Context& helping_destination();
 
 				time_t execution_time() const {
@@ -397,6 +417,15 @@ class Kernel::Scheduler
 		 * Current context likes another context to be scheduled now
 		 */
 		void yield();
+
+		/**
+		 * Let 'context', which left the scheduler of another CPU, join this one
+		 *
+		 * The context must be unready. Virtual times of different schedulers
+		 * are not comparable, so the context starts with the minimum virtual
+		 * time of its group here, like a context that just became ready.
+		 */
+		void join(Context &context);
 
 		bool current_helping_destination(Context&) const;
 

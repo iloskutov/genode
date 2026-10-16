@@ -57,21 +57,34 @@ void Cpu_context::_yield()
 
 void Cpu_context::_interrupt()
 {
+	/*
+	 * The IRQ may move this context to another CPU (inter-processor work),
+	 * the IRQ is finished on the CPU that took it
+	 */
+	Cpu &cpu = _cpu();
+
 	/* let the IRQ controller take a pending IRQ for handling, if any */
 	unsigned irq_id;
-	if (_cpu().pic().take_request(irq_id))
+	if (cpu.pic().take_request(irq_id))
 
 		/*
 		 * let the CPU of this context handle the IRQ,
 		 * if it is a CPU-local one, otherwise use the global pool
 		 */
-		if (!_cpu().handle_if_cpu_local_interrupt(irq_id))
-			_cpu()._pool.irq_pool().with(irq_id,
+		if (!cpu.handle_if_cpu_local_interrupt(irq_id))
+			cpu._pool.irq_pool().with(irq_id,
 				[] (Irq &irq) { irq.occurred(); },
 				[&] { Genode::raw("Unknown interrupt ", irq_id); });
 
 	/* let the IRQ controller finish the currently taken IRQ */
-	_cpu().pic().finish_request();
+	cpu.pic().finish_request();
+}
+
+
+void Cpu_context::_move_to(Cpu &cpu)
+{
+	_cpu_ptr = &cpu;
+	cpu.scheduler().join(*this);
 }
 
 

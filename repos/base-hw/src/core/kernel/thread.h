@@ -152,6 +152,16 @@ class Kernel::Thread : private Kernel::Object, public Cpu_context, private Timeo
 		void _pause();
 		bool _restart();
 
+		/**
+		 * Move this thread, which no CPU executes right now, to CPU 'cpu'
+		 */
+		void _migrate(Cpu &cpu);
+
+		/**
+		 * Stop being scheduled for a context this thread helped
+		 */
+		void _helping_lost();
+
 		enum Ipc_alloc_result { OK, EXHAUSTED };
 
 		[[nodiscard]] Ipc_alloc_result _ipc_alloc_recv_caps(unsigned rcv_cap_count);
@@ -408,6 +418,26 @@ class Kernel::Core_thread : public Kernel::Thread
 		};
 
 		/**
+		 * Object to move a thread still active on another cpu
+		 * needs cross-cpu synchronization
+		 */
+		struct Migrate : Inter_processor_work
+		{
+			Core_thread &_caller; /* the caller gets blocked till the end */
+			Thread      &_thread; /* thread to be moved */
+			Cpu         &_to;     /* targeted cpu */
+
+			Migrate(Cpu &cpu, Core_thread &caller, Thread &thread, Cpu &to);
+
+
+			/************************************
+			 ** Inter_processor_work interface **
+			 ************************************/
+
+			void execute(Cpu &) override;
+		};
+
+		/**
 		 * Flush and stop CPU, e.g. before suspending or powering off the CPU
 		 */
 		struct Flush_and_stop_cpu : Inter_processor_work
@@ -444,6 +474,7 @@ class Kernel::Core_thread : public Kernel::Thread
 		Genode::Constructible<Destroy<Vcpu>>      _vcpu_destroy {};
 		Genode::Constructible<Flush_and_stop_cpu> _stop_cpu {};
 		Genode::Constructible<Pause>              _thread_pause {};
+		Genode::Constructible<Migrate>            _thread_migrate {};
 
 		virtual void _mmu_exception(Cpu_state&) override;
 		virtual void _exception() override;
@@ -468,6 +499,7 @@ class Kernel::Core_thread : public Kernel::Thread
 		Rpc_result _call_thread_start(Thread&, Native_utcb&);
 		void _call_thread_pause(Thread &);
 		void _call_thread_resume(Thread &);
+		bool _call_thread_migrate(Thread &, unsigned const);
 		void _call_thread_destroy(C_thread &);
 		void _call_thread_pager(Thread &, Thread &, capid_t);
 		void _call_thread_pager_signal_ack(capid_t, Thread &, bool);

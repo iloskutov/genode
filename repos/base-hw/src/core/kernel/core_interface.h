@@ -64,6 +64,7 @@ namespace Kernel {
 		THREAD_CREATE,
 		THREAD_DESTROY,
 		THREAD_EXC_STATE_GET,
+		THREAD_MIGRATE,
 		THREAD_PAGER_SET,
 		THREAD_PAGER_SIGNAL_ACK,
 		THREAD_PAUSE,
@@ -123,6 +124,26 @@ namespace Kernel {
 	inline void thread_resume(Thread &thread)
 	{
 		core_call(Core_call_id::THREAD_RESUME, (Call_arg)&thread);
+	}
+
+
+	/**
+	 * Move a thread to another CPU
+	 *
+	 * \param thread  reference to thread kernel object
+	 * \param cpu_id  kernel name of the targeted CPU
+	 *
+	 * \retval true   the thread is assigned to CPU 'cpu_id'
+	 * \retval false  there is no CPU 'cpu_id'
+	 *
+	 * If the thread executes on another CPU right now, the call returns
+	 * after that CPU took the thread off. The thread keeps its state, a
+	 * blocked thread wakes up on the new CPU later.
+	 */
+	inline bool thread_migrate(Thread &thread, unsigned const cpu_id)
+	{
+		return core_call(Core_call_id::THREAD_MIGRATE, (Call_arg)&thread,
+		                 (Call_arg)cpu_id) != 0;
 	}
 
 

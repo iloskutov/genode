@@ -344,6 +344,12 @@ void Scheduler::yield()
 }
 
 
+void Scheduler::join(Context &c)
+{
+	_with_group(c, [&] (Group &group) { c._vtime = group._min_vtime; });
+}
+
+
 bool Scheduler::current_helping_destination(Context& context) const
 {
 	bool ret = false;

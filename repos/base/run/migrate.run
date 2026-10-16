@@ -2,7 +2,7 @@ build { core init lib/ld test/migrate timer }
 
 assert {[have_include power_on/qemu]}
 
-assert {[have_spec nova] || [have_spec foc] || [have_spec sel4]}
+assert {[have_spec nova] || [have_spec foc] || [have_spec sel4] || [have_spec hw]}
 
 if {[have_spec foc]} {
 	assert {![have_board pbxa9] && ![have_board rpi3]} \
@@ -31,7 +31,7 @@ config | prio_levels: 2
 + start timer | caps: 100 | ram: 1M
   + provides | + service Timer
 
-+ start test-migrate | caps: 100 | ram: 10M
++ start test-migrate | caps: 200 | ram: 10M
   + config
   + route
     + service TRACE | + parent | label:
@@ -48,7 +48,9 @@ build_boot_image [build_artifacts]
 append qemu_args "-nographic "
 append qemu_args "-smp 4,cores=4,threads=1"
 
-run_genode_until {.*test completed successfully.*\n} 70
+run_genode_until {.*test completed successfully.*\n} 90
+
+set original_output $output
 
 grep_output {^\[init -> test-migrate\] \[ep\] thread 'migrate' migrated, .*}
 
@@ -57,4 +59,16 @@ compare_output_to {
 [init -> test-migrate] [ep] thread 'migrate' migrated, location=2x0
 [init -> test-migrate] [ep] thread 'migrate' migrated, location=3x0
 [init -> test-migrate] [ep] thread 'migrate' migrated, location=0x0
+}
+
+set output $original_output
+
+grep_output {^\[init -> test-migrate\] \[ep\] thread 'spin' (runs|stays) .*}
+
+compare_output_to {
+[init -> test-migrate] [ep] thread 'spin' runs at location=1x0, counter advanced
+[init -> test-migrate] [ep] thread 'spin' runs at location=2x0, counter advanced
+[init -> test-migrate] [ep] thread 'spin' runs at location=3x0, counter advanced
+[init -> test-migrate] [ep] thread 'spin' runs at location=0x0, counter advanced
+[init -> test-migrate] [ep] thread 'spin' stays at location=0x0, counter advanced
 }

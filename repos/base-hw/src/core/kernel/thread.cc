@@ -626,6 +626,44 @@ void Thread::_pause()
 }
 
 
+void Thread::_helping_lost()
+{
+	/*
+	 * A helper waits for an IPC reply or for its pager, it was ready only
+	 * to execute the context it helped. A faulter remains active while
+	 * helping its pager and has to await the restart by the pager instead.
+	 */
+	_deactivate();
+	if (_state == ACTIVE)
+		_state = AWAITS_RESTART;
+}
+
+
+void Thread::_migrate(Cpu &cpu)
+{
+	Cpu &old = _cpu();
+	if (&old == &cpu)
+		return;
+
+	/* leave the scheduler of the old CPU, time is accounted up to now */
+	_deactivate();
+
+	/* helping works only between contexts of the same CPU */
+	_helping_cut([] (Cpu_context &c) {
+		static_cast<Thread &>(c)._helping_lost(); });
+
+	/* a pending timeout continues with its remaining ticks */
+	old.timer().move_timeout(*this, cpu.timer());
+
+	/* join with the group's minimum virtual time of the new CPU */
+	_move_to(cpu);
+
+	/* a blocked thread becomes ready on the new CPU when it wakes up */
+	if (_state == ACTIVE && !_paused)
+		_activate();
+}
+
+
 Thread::Thread(Cpu &cpu, Pd &pd)
 :
 	Kernel::Object { *this },
@@ -741,6 +779,25 @@ void Core_thread::Pause::execute(Cpu &cpu)
 }
 
 
+Core_thread::Migrate::Migrate(Cpu &cpu, Core_thread &caller, Thread &thread,
+                              Cpu &to)
+:
+	_caller(caller), _thread(thread), _to(to)
+{
+	cpu.work_list().insert(&_le);
+	_caller._become_inactive(AWAITS_RESTART);
+	cpu.trigger_ip_interrupt();
+}
+
+
+void Core_thread::Migrate::execute(Cpu &cpu)
+{
+	cpu.work_list().remove(&_le);
+	_thread._migrate(_to);
+	_caller._restart();
+}
+
+
 Rpc_result Core_thread::_call_thread_start(Thread &thread, Native_utcb &utcb)
 {
 	ASSERT(thread._state == AWAITS_START);
@@ -781,6 +838,32 @@ void Core_thread::_call_thread_resume(Thread &thread)
 		thread._activate();
 
 	thread._paused = false;
+}
+
+
+bool Core_thread::_call_thread_migrate(Thread &thread, unsigned const cpu_id)
+{
+	bool found = false;
+
+	_cpu_pool.with_cpu(cpu_id, [&] (Cpu &cpu) {
+
+		found = true;
+
+		/**
+		 * Move a thread immediately if no other cpu executes it right now
+		 */
+		if (!thread.remotely_running()) {
+			thread._migrate(cpu);
+			return;
+		}
+
+		/**
+		 * Construct a cross-cpu work item and send an IPI
+		 */
+		_thread_migrate.construct(thread._cpu(), *this, thread, cpu);
+	});
+
+	return found;
 }
 
 
@@ -1028,6 +1111,12 @@ void Core_thread::_call(Cpu_state &state)
 		{
 			*args.read<2, Exception_state*>() =
 				args.read<1, Thread*>()->exception_state();
+			return;
+		}
+	case Core_call_id::THREAD_MIGRATE:
+		{
+			args.write(_call_thread_migrate(*args.read<1, Thread*>(),
+			                                args.read<2, unsigned>()));
 			return;
 		}
 	case Core_call_id::THREAD_PAGER_SET:

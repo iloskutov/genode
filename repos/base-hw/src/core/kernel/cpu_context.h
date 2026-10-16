@@ -70,6 +70,25 @@ class Kernel::Cpu_context : private Scheduler::Context
 
 		void _help(Cpu_context &context) { Context::help(context); }
 
+		/**
+		 * End the helping of this context and of its helpers
+		 *
+		 * Helping works only between contexts of the same CPU.
+		 *
+		 * \param fn  called with each context that stopped helping,
+		 *            this one included if it helped another context
+		 */
+		void _helping_cut(auto const &fn)
+		{
+			Context::helping_cut([&] (Context &c) {
+				fn(static_cast<Cpu_context &>(c)); });
+		}
+
+		/**
+		 * Assign this unready context to CPU 'cpu'
+		 */
+		void _move_to(Cpu &cpu);
+
 		using Context::ready;
 		using Context::helping_finished;
 

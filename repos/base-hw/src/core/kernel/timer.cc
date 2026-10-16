@@ -38,38 +38,46 @@ time_t Timer::timeout_max_us() const
 
 void Timer::set_timeout(Timeout &timeout, time_t const duration)
 {
-	/*
-	 * Remove timeout if it is already in use. Timeouts may get overridden as
-	 * result of an update.
-	 */
-	if (timeout._listed)
-		_timeout_list.remove(&timeout);
-	else
-		timeout._listed = true;
+	/* timeouts may get overridden as result of an update */
+	if (_timeouts.set(timeout, time() + duration))
+		_first_timeout_changed();
+}
 
-	/* set timeout parameters */
-	timeout._end = time() + duration;
 
-	/*
-	 * Insert timeout. Timeouts are ordered ascending according to their end
-	 * time to be able to quickly determine the nearest timeout.
-	 */
-	Timeout * t1 = 0;
-	for (Timeout * t2 = _timeout_list.first();
-	     t2 && t2->_end < timeout._end;
-	     t1 = t2, t2 = t2->next()) { }
-
-	_timeout_list.insert(&timeout, t1);
-
-	if (_timeout_list.first() == &timeout)
+void Timer::_first_timeout_changed()
+{
+	/* only the CPU of this timer can program its device */
+	if (_cpu.id() == Cpu::executing_id()) {
 		_schedule_timeout();
+		return;
+	}
+
+	_device_outdated = true;
+	_cpu.trigger_ip_interrupt();
+}
+
+
+void Timer::move_timeout(Timeout &timeout, Timer &to)
+{
+	if (_timeouts.move(timeout, time(), to._timeouts, to.time()))
+		to._first_timeout_changed();
+}
+
+
+void Timer::update_device()
+{
+	if (!_device_outdated)
+		return;
+
+	_device_outdated = false;
+	_schedule_timeout();
 }
 
 
 void Timer::_schedule_timeout()
 {
 	/* get the timeout with the nearest end time */
-	Timeout * timeout = _timeout_list.first();
+	Timeout * timeout = _timeouts.first();
 	time_t end = timeout ? timeout->_end : _time + _max_value();
 
 	/* install timeout at timer hardware */
@@ -86,26 +94,25 @@ void Timer::_process_timeouts()
 	 */
 	time_t t = time();
 	while (true) {
-		Timeout * const timeout = _timeout_list.first();
+		Timeout * const timeout = _timeouts.first();
 		if (!timeout)
 			break;
 
 		if (timeout->_end > t)
 			break;
 
-		_timeout_list.remove(timeout);
-		timeout->_listed = false;
+		_timeouts.remove(*timeout);
 		timeout->timeout_triggered();
 	}
 
-	if (_timeout_list.first())
+	if (_timeouts.first())
 		_schedule_timeout();
 }
 
 
 Timer::Timer(Cpu &cpu)
 :
-	_device(cpu), _irq(interrupt_id(), cpu)
+	_cpu(cpu), _device(cpu), _irq(interrupt_id(), cpu)
 {
 	/*
 	 * The timer frequency should allow a good accuracy on the smallest

@@ -26,6 +26,7 @@ struct Scheduler_test::Main
 {
 	using time_t = Kernel::time_t;
 	using Scheduler = Kernel::Scheduler;
+	using vtime_t = Scheduler::vtime_t;
 
 	struct Context : Scheduler::Context
 	{
@@ -143,20 +144,50 @@ struct Scheduler_test::Main
 	void test_io_signal();
 	void test_all_and_yield();
 	void test_destroy_helped();
+	void test_migrate();
+	void test_timeout_move();
 
-	Main(Env &env) : env(env)
+	/*
+	 * Set fixed values for min timeout and group weights and warp
+	 * values here, because they may change within the kernel, but
+	 * the algorithm logic gets tested here instead
+	 */
+	static void configure(Scheduler &s)
 	{
-		/*
-		 * Set fixed values for min timeout and group weights and warp
-		 * values here, because they may change within the kernel, but
-		 * the algorithm logic gets tested here instead
-		 */
-		scheduler._min_timeout = 500;
-		construct_at<Scheduler::Group>(&scheduler._groups[Gids::DRIVER], 2, 400, 2900);
-		construct_at<Scheduler::Group>(&scheduler._groups[Gids::MULTIMEDIA], 3, 200, 2900);
-		construct_at<Scheduler::Group>(&scheduler._groups[Gids::APP], 2, 100, 2900);
-		construct_at<Scheduler::Group>(&scheduler._groups[Gids::BACKGROUND], 1, 0, 0);
+		s._min_timeout = 500;
+		construct_at<Scheduler::Group>(&s._groups[Gids::DRIVER], 2, 400, 2900);
+		construct_at<Scheduler::Group>(&s._groups[Gids::MULTIMEDIA], 3, 200, 2900);
+		construct_at<Scheduler::Group>(&s._groups[Gids::APP], 2, 100, 2900);
+		construct_at<Scheduler::Group>(&s._groups[Gids::BACKGROUND], 1, 0, 0);
 	}
+
+	/**
+	 * Return whether scheduler 's' holds context 'c' in any of its lists
+	 */
+	static bool lists(Scheduler &s, Scheduler::Context &c)
+	{
+		using List_element = Genode::List_element<Scheduler::Context>;
+
+		bool found = (s._current == &c);
+		for (List_element *le = s._ready_contexts.first(); le; le = le->next())
+			if (le->object() == &c) found = true;
+		s._for_each_group([&] (Scheduler::Group &group) {
+			for (List_element *le = group._contexts.first(); le; le = le->next())
+				if (le->object() == &c) found = true; });
+		return found;
+	}
+
+	void check(bool const condition, char const *what, unsigned const line_nr)
+	{
+		if (condition)
+			return;
+
+		error(what, " in line ", line_nr);
+		dump();
+		env.parent().exit(-1);
+	}
+
+	Main(Env &env) : env(env) { configure(scheduler); }
 };
 
 
@@ -321,6 +352,149 @@ void Scheduler_test::Main::test_destroy_helped()
 }
 
 
+void Scheduler_test::Main::test_migrate()
+{
+	/* second CPU with its own timer, idle context, and scheduler */
+	Kernel::Timer timer_b {};
+	Context       idle_b { Gids::INVALID, "idle_b" };
+	Scheduler     scheduler_b { timer_b, idle_b };
+	configure(scheduler_b);
+
+	auto update_b = [&] (time_t const time, Id const expected_current,
+	                     unsigned const line_nr)
+	{
+		timer_b.set_time(time);
+		scheduler_b.update();
+		check(&scheduler_b.current() == &contexts[expected_current],
+		      "wrong current context on scheduler B", line_nr);
+	};
+
+	/* APP1 and APP2 share scheduler A for a while */
+	scheduler.ready(contexts[APP1]);
+	scheduler.ready(contexts[APP2]);
+
+	/* params:       time, curr, timeout, line */
+	update_and_check(    0, APP1,     500, __LINE__);
+	update_and_check(  500, APP2,    1400, __LINE__);
+	update_and_check( 1500, APP1,    2500, __LINE__);
+	update_and_check( 2500, APP2,    3500, __LINE__);
+	update_and_check( 3500, APP1,    4500, __LINE__);
+
+	/* APP3 runs alone on scheduler B, B's virtual times stay small */
+	scheduler_b.ready(contexts[APP3]);
+	update_b(  0, APP3, __LINE__);
+	update_b(100, APP3, __LINE__);
+
+	vtime_t const vtime_a = contexts[APP1]._vtime;
+
+	/* APP1 leaves scheduler A while it is ready and current */
+	timer.set_time(3600);
+	scheduler.unready(contexts[APP1]);
+	scheduler_b.join(contexts[APP1]);
+
+	check(!lists(scheduler, contexts[APP1]), "A still lists APP1", __LINE__);
+	check(!contexts[APP1].ready(), "APP1 still ready", __LINE__);
+	check(contexts[APP1]._vtime == scheduler_b._groups[Gids::APP]._min_vtime,
+	      "APP1 vtime is not B's group minimum", __LINE__);
+	check(contexts[APP1]._vtime < vtime_a,
+	      "APP1 keeps the vtime of scheduler A", __LINE__);
+	check(contexts[APP1].execution_time() == 1600,
+	      "APP1 lost its execution time", __LINE__);
+
+	/* joining keeps it unready, B lists it only when it becomes ready */
+	check(!lists(scheduler_b, contexts[APP1]), "B lists blocked APP1", __LINE__);
+	update_b(150, APP3, __LINE__);
+
+	/* A continues with APP2 alone */
+	update_and_check(3600, APP2, scheduler._max_timeout + 3600, __LINE__);
+
+	/* APP1 joins B and shares it with APP3 at once */
+	scheduler_b.ready(contexts[APP1]);
+	update_b( 200, APP1, __LINE__);
+	update_b( 700, APP3, __LINE__);
+	update_b(1700, APP1, __LINE__);
+	check(!lists(scheduler, contexts[APP1]), "A lists APP1 again", __LINE__);
+
+	/*
+	 * A context that never ran (vtime 0, far below B's) joins B: it must
+	 * not monopolise B, APP1 and APP3 get their turns as before
+	 */
+	Context app4 { Gids::APP, "app4" };
+	scheduler_b.join(app4);
+	check(app4._vtime == scheduler_b._groups[Gids::APP]._min_vtime,
+	      "app4 vtime is not B's group minimum", __LINE__);
+	check(app4._vtime > 0, "B's group minimum is still 0", __LINE__);
+	scheduler_b.ready(app4);
+
+	unsigned turns[3] { };
+	for (time_t t = 1800; t <= 9800; t += 100) {
+		timer_b.set_time(t);
+		scheduler_b.update();
+		Scheduler::Context const &c = scheduler_b.current();
+		if (&c == &contexts[APP1]) turns[0]++;
+		if (&c == &contexts[APP3]) turns[1]++;
+		if (&c == &app4)           turns[2]++;
+	}
+	check(turns[0] && turns[1] && turns[2], "a context starved on B", __LINE__);
+	check(turns[2] < 2*turns[0] && turns[2] < 2*turns[1],
+	      "app4 monopolised B", __LINE__);
+
+	scheduler_b.unready(app4);
+	scheduler_b.unready(contexts[APP1]);
+	scheduler_b.unready(contexts[APP3]);
+}
+
+
+void Scheduler_test::Main::test_timeout_move()
+{
+	using Kernel::Timeout;
+	using Kernel::Timeout_list;
+
+	/* timers of two CPUs, their time counts from different bases */
+	Timeout_list a { }, b { };
+	time_t const a_base = 1000, b_base = 50000;
+
+	Timeout t1 { }, t2 { }, t3 { }, t4 { };
+
+	check(a.set(t1, a_base + 300), "t1 is not first on A", __LINE__);
+	check(a.set(t2, a_base + 100), "t2 is not first on A", __LINE__);
+	check(b.set(t3, b_base + 200), "t3 is not first on B", __LINE__);
+
+	/* 100 ticks later t1 has 200 left, it ends after t3 on B */
+	check(!a.move(t1, a_base + 100, b, b_base + 100),
+	      "t1 claims to be first on B", __LINE__);
+	check(t1.listed() && t1.end() == b_base + 300,
+	      "t1 lost its remaining ticks", __LINE__);
+
+	/* t2 is due, it becomes B's first and B must program its timer */
+	check(a.move(t2, a_base + 100, b, b_base + 100),
+	      "due t2 is not first on B", __LINE__);
+	check(t2.end() == b_base + 100, "due t2 is not due on B", __LINE__);
+
+	check(!a.first(), "A still lists a moved timeout", __LINE__);
+	check(b.first() == &t2, "B's first is not t2", __LINE__);
+	b.remove(t2);
+	check(b.first() == &t3, "B's second is not t3", __LINE__);
+	b.remove(t3);
+	check(b.first() == &t1, "B's third is not t1", __LINE__);
+	b.set(t2, b_base + 100);
+	b.set(t3, b_base + 200);
+
+	/* an unlisted timeout stays unlisted */
+	check(!a.move(t4, a_base, b, b_base), "unlisted t4 moved", __LINE__);
+	check(!t4.listed(), "unlisted t4 got listed", __LINE__);
+
+	/* moving back keeps the remaining ticks too, and A gets a new first */
+	check(b.move(t1, b_base + 250, a, a_base + 400),
+	      "t1 is not first on empty A", __LINE__);
+	check(t1.end() == a_base + 450, "t1 lost its ticks moving back", __LINE__);
+
+	a.remove(t1);
+	b.remove(t2);
+	b.remove(t3);
+}
+
+
 void Component::construct(Env &env)
 {
 	{
@@ -346,6 +520,12 @@ void Component::construct(Env &env)
 	{
 		Scheduler_test::Main main { env };
 		main.test_destroy_helped();
+		main.test_migrate();
+	}
+
+	{
+		Scheduler_test::Main main { env };
+		main.test_timeout_move();
 	}
 
 

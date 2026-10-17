@@ -1,0 +1,57 @@
+#
+# Test of core's Cpu_control service: moving a thread by its label and name
+#
+
+assert {[have_spec hw]}
+assert {[have_include power_on/qemu]}
+assert {[have_board virt_qemu_arm_v8a] || [have_board virt_qemu_arm_v7a]}
+
+build { core init lib/ld timer test/cpu_control }
+
+create_boot_directory
+
+install_config {
+config
++ parent-provides
+  + service LOG
+  + service CPU
+  + service ROM
+  + service PD
+  + service IO_MEM
+  + service IRQ
+  + service TRACE
+  + service Cpu_control
+
++ default-route
+  + any-service
+    + parent
+    + any-child
+
++ start timer | caps: 100 | ram: 1M
+  + provides | + service Timer
+
++ start test-cpu_control | caps: 200 | ram: 10M
+  + route
+    + service TRACE | + parent | label:
+    + any-service
+      + parent
+      + any-child
+-
+}
+
+build_boot_image [build_artifacts]
+
+append qemu_args "-nographic "
+
+run_genode_until {.*test completed successfully.*\n} 60
+
+grep_output {^\[init -> test-cpu_control\] (move|thread).*}
+
+compare_output_to {
+[init -> test-cpu_control] move of 'spin' outside of the CPUs: invalid location
+[init -> test-cpu_control] move of an unknown thread: invalid thread
+[init -> test-cpu_control] move of an idle thread: invalid thread
+[init -> test-cpu_control] move of a destroyed thread: invalid thread
+[init -> test-cpu_control] move of 'spin' to location=2x0: ok
+[init -> test-cpu_control] thread 'spin' runs at location=2x0 after the move, counter advanced
+}

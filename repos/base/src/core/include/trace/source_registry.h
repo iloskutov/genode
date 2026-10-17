@@ -73,6 +73,19 @@ class Core::Trace::Source
 			virtual Info trace_source_info() const = 0;
 		};
 
+		/**
+		 * Interface for moving the thread of a trace source
+		 */
+		struct Affinity_accessor : Interface
+		{
+			/**
+			 * Move the thread to the physical location
+			 *
+			 * \return false if the location lies outside the platform
+			 */
+			virtual bool trace_source_affinity(Affinity::Location) = 0;
+		};
+
 		struct Id { unsigned value; };
 
 	private:
@@ -80,6 +93,7 @@ class Core::Trace::Source
 		Id            const  _unique_id;
 		Info_accessor const &_info;
 		Control             &_control;
+		Affinity_accessor   *_affinity_ptr;
 		Dataspace_capability _policy { };
 		Dataspace_capability _buffer { };
 		Source_owner  const *_owner_ptr = nullptr;
@@ -94,9 +108,17 @@ class Core::Trace::Source
 
 	public:
 
-		Source(Info_accessor const &info, Control &control)
+		/**
+		 * Constructor
+		 *
+		 * \param affinity  accessor for moving the thread, nullptr if the
+		 *                  source cannot be moved
+		 */
+		Source(Info_accessor const &info, Control &control,
+		       Affinity_accessor *affinity = nullptr)
 		:
-			_unique_id(_alloc_unique_id()), _info(info), _control(control)
+			_unique_id(_alloc_unique_id()), _info(info), _control(control),
+			_affinity_ptr(affinity)
 		{ }
 
 		~Source()
@@ -120,6 +142,17 @@ class Core::Trace::Source
 
 		void enable()  { _control.enable(); }
 		void disable() { _control.disable(); }
+
+		enum class Affinity_result { OK, NOT_MOVABLE, INVALID_LOCATION };
+
+		Affinity_result affinity(Affinity::Location location)
+		{
+			if (!_affinity_ptr)
+				return Affinity_result::NOT_MOVABLE;
+
+			return _affinity_ptr->trace_source_affinity(location)
+			     ? Affinity_result::OK : Affinity_result::INVALID_LOCATION;
+		}
 
 		bool try_acquire(Source_owner const &new_owner)
 		{

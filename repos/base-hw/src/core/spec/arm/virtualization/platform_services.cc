@@ -20,6 +20,7 @@
 #include <core_service.h>
 #include <map_local.h>
 #include <vm_root.h>
+#include <cpu_control_root.h>
 
 using namespace Core;
 
@@ -28,7 +29,7 @@ extern addr_t hypervisor_exception_vector;
 
 
 /*
- * Add ARM virtualization specific vm service
+ * Add ARM virtualization specific vm service, and the Cpu_control service
  */
 void Core::platform_add_local_services(Runtime                &,
                                        Rpc_entrypoint         &ep,
@@ -40,6 +41,10 @@ void Core::platform_add_local_services(Runtime                &,
                                        Local_rm               &local_rm,
                                        Range_allocator        &)
 {
+	static Cpu_control_root cpu_control_root(ep, sh, trace_sources);
+	static Core_service<Cpu_control_session_component>
+		cpu_control_service(services, cpu_control_root);
+
 	map_local(Platform::core_phys_addr((addr_t)&hypervisor_exception_vector),
 	          Hw::Mm::hypervisor_exception_vector().base,
 	          Hw::Mm::hypervisor_exception_vector().size / PAGE_SIZE,

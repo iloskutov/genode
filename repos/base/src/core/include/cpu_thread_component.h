@@ -36,7 +36,8 @@ namespace Core {
 
 class Core::Cpu_thread_component : public  Rpc_object<Cpu_thread>,
                                    private List<Cpu_thread_component>::Element,
-                                   public  Trace::Source::Info_accessor
+                                   public  Trace::Source::Info_accessor,
+                                   public  Trace::Source::Affinity_accessor
 {
 	public:
 
@@ -149,7 +150,7 @@ class Core::Cpu_thread_component : public  Rpc_object<Cpu_thread>,
 			_platform_thread.pager(_rm_client);
 			trace_control_area.with_control(_trace_control_slot,
 				[&] (Trace::Control &control) {
-					_trace_source.construct(*this, control);
+					_trace_source.construct(*this, control, this);
 					Trace::Source &source = *_trace_source;
 					_trace_sources.insert(&source);
 				});
@@ -183,6 +184,13 @@ class Core::Cpu_thread_component : public  Rpc_object<Cpu_thread>,
 			         _platform_thread.execution_time(),
 			         _platform_thread.affinity() };
 		}
+
+
+		/************************************************
+		 ** Trace::Source::Affinity_accessor interface **
+		 ************************************************/
+
+		bool trace_source_affinity(Affinity::Location) override;
 
 
 		/************************

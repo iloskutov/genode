@@ -13,6 +13,7 @@
 
 /* core includes */
 #include <cpu_session_component.h>
+#include <platform_generic.h>
 
 using namespace Core;
 
@@ -82,6 +83,20 @@ void Cpu_thread_component::exception_sigh(Signal_context_capability sigh)
 void Cpu_thread_component::affinity(Affinity::Location location)
 {
 	_platform_thread.affinity(location);
+}
+
+
+bool Cpu_thread_component::trace_source_affinity(Affinity::Location location)
+{
+	/* the location is physical, as reported by the trace source */
+	Affinity::Space const space = platform().affinity_space();
+
+	if ((unsigned)location.xpos() >= space.width() ||
+	    (unsigned)location.ypos() >= space.height())
+		return false;
+
+	_platform_thread.affinity(location);
+	return true;
 }
 
 

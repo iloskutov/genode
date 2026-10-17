@@ -350,6 +350,27 @@ void Scheduler::join(Context &c)
 }
 
 
+void Scheduler::account_helping_change(Context &c)
+{
+	if (current_helping_destination(c))
+		_update_time();
+}
+
+
+void Scheduler::help(Context &helper, Context &destination)
+{
+	account_helping_change(helper);
+	helper.help(destination);
+}
+
+
+void Scheduler::helping_finished(Context &helper)
+{
+	account_helping_change(helper);
+	helper.helping_finished();
+}
+
+
 bool Scheduler::current_helping_destination(Context& context) const
 {
 	bool ret = false;

@@ -146,6 +146,7 @@ struct Scheduler_test::Main
 	void test_destroy_helped();
 	void test_migrate();
 	void test_timeout_move();
+	void test_helping_time();
 
 	/*
 	 * Set fixed values for min timeout and group weights and warp
@@ -495,6 +496,51 @@ void Scheduler_test::Main::test_timeout_move()
 }
 
 
+void Scheduler_test::Main::test_helping_time()
+{
+	/*
+	 * APP1 is a client, APP2 a server waiting for a request. The server's
+	 * virtual time is ahead, so the scheduler keeps the client current
+	 * and the client executes the server while it helps.
+	 */
+	Context &client = contexts[APP1], &server = contexts[APP2];
+	server._vtime = 10000;
+
+	scheduler.ready(client);
+	update_and_check(0, APP1, scheduler._max_timeout, __LINE__);
+
+	/* the client computes for 300, then calls the server and helps it */
+	timer.set_time(300);
+	scheduler.ready(server);
+	scheduler.help(client, server);
+	timer.set_time(300);
+	scheduler.update();
+	check(&current() == &client, "the client is not current", __LINE__);
+	check(&scheduler.current().helping_destination() == &server,
+	      "the client does not execute the server", __LINE__);
+
+	/* the server works for 200 and replies, the client continues for 100 */
+	timer.set_time(500);
+	scheduler.helping_finished(client);
+	scheduler.unready(server);
+	timer.set_time(600);
+	scheduler.update();
+	scheduler.unready(client);
+
+	log("helping: execution time client ", client.execution_time(),
+	    " server ", server.execution_time());
+
+	check(client.execution_time() == 400,
+	      "client time is not its own computation (300 + 100)", __LINE__);
+	check(server.execution_time() == 200,
+	      "server time is not the time it worked (200)", __LINE__);
+
+	/* the scheduling share stays the client's: it donated it */
+	check(client._vtime == 600, "client vtime does not cover its share", __LINE__);
+	check(server._vtime == 10000, "server vtime changed while helped", __LINE__);
+}
+
+
 void Component::construct(Env &env)
 {
 	{
@@ -526,6 +572,11 @@ void Component::construct(Env &env)
 	{
 		Scheduler_test::Main main { env };
 		main.test_timeout_move();
+	}
+
+	{
+		Scheduler_test::Main main { env };
+		main.test_helping_time();
 	}
 
 

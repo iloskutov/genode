@@ -427,6 +427,27 @@ class Kernel::Scheduler
 		 */
 		void join(Context &context);
 
+		/**
+		 * Account the time up to now before a helping relation of 'c' changes
+		 *
+		 * The execution time since the last update belongs to the helping
+		 * destination of the current context. If 'c' is part of that chain,
+		 * a change of its helping would hand this time to another context.
+		 * The virtual time stays with the current context: a helper spends
+		 * its own share on its destination.
+		 */
+		void account_helping_change(Context &c);
+
+		/**
+		 * Let 'helper' execute 'destination' on its share
+		 */
+		void help(Context &helper, Context &destination);
+
+		/**
+		 * End the helping of 'helper'
+		 */
+		void helping_finished(Context &helper);
+
 		bool current_helping_destination(Context&) const;
 
 		Context& current() const {

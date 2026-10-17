@@ -68,7 +68,7 @@ class Kernel::Cpu_context : private Scheduler::Context
 		bool _helping_possible(Cpu_context const &j) const {
 			return j._cpu_ptr == _cpu_ptr; }
 
-		void _help(Cpu_context &context) { Context::help(context); }
+		void _help(Cpu_context &context);
 
 		/**
 		 * End the helping of this context and of its helpers
@@ -80,9 +80,20 @@ class Kernel::Cpu_context : private Scheduler::Context
 		 */
 		void _helping_cut(auto const &fn)
 		{
+			_account_helping_change();
 			Context::helping_cut([&] (Context &c) {
 				fn(static_cast<Cpu_context &>(c)); });
 		}
+
+		/**
+		 * Account the time up to now before the helping of this context changes
+		 */
+		void _account_helping_change();
+
+		/**
+		 * End the helping of this context
+		 */
+		void helping_finished();
 
 		/**
 		 * Assign this unready context to CPU 'cpu'
@@ -90,7 +101,6 @@ class Kernel::Cpu_context : private Scheduler::Context
 		void _move_to(Cpu &cpu);
 
 		using Context::ready;
-		using Context::helping_finished;
 
 	public:
 

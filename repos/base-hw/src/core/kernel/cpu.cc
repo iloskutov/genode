@@ -81,6 +81,18 @@ void Cpu_context::_interrupt()
 }
 
 
+void Cpu_context::_help(Cpu_context &context) {
+	_cpu().scheduler().help(*this, context); }
+
+
+void Cpu_context::helping_finished() {
+	_cpu().scheduler().helping_finished(*this); }
+
+
+void Cpu_context::_account_helping_change() {
+	_cpu().scheduler().account_helping_change(*this); }
+
+
 void Cpu_context::_move_to(Cpu &cpu)
 {
 	_cpu_ptr = &cpu;

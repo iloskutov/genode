@@ -141,6 +141,12 @@ class Kernel::User_irq : public Kernel::Irq
 
 		void occurred() override;
 
+		/**
+		 * Unmask the IRQ for the CPU of the thread that received its last
+		 * signal, so the IRQ follows its handler, also after a move
+		 */
+		void enable() const;
+
 		Object &kernel_object() { return _kernel_object; }
 
 		/**

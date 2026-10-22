@@ -243,11 +243,28 @@ class Hw::Local_interrupt_controller
 			_last_iar = _spurious_id;
 		}
 
-		void unmask(unsigned const irq_id, Hw::Arm_cpu::Id)
+		/**
+		 * Unmask IRQ 'irq_id' for CPU 'cpu_id'
+		 *
+		 * A shared peripheral interrupt is routed to the CPU, as GICv2 does
+		 * with its targets. The CPU's affinity follows 'Cpu::executing_id':
+		 * Aff1 on CPUs with the MT bit, else Aff0, Aff2 and Aff3 as on the
+		 * executing CPU.
+		 */
+		void unmask(unsigned const irq_id, Hw::Arm_cpu::Id cpu_id)
 		{
 			if (irq_id < Global_interrupt_controller::MIN_SPI) {
 				_redistr_sgi.write<Redistributor_sgi_ppi::Isenabler0>(1, irq_id);
 			} else {
+				Genode::uint64_t mpidr = 0;
+				asm volatile ("mrs %0, mpidr_el1" : "=r"(mpidr));
+
+				Genode::uint64_t const id  = cpu_id.value;
+				bool             const mt  = mpidr & (1ULL << 24);
+				Genode::uint64_t const aff = (mpidr & 0xff00ff0000ULL)
+				                           | (mt ? id << 8 : id);
+
+				_distr.write<Distributor::Irouter>(aff, irq_id);
 				_distr.write<Distributor::Isenabler::Set_enable>(1, irq_id);
 			}
 		}

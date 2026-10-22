@@ -131,6 +131,9 @@ class Kernel::Signal_context
 		bool                    _ack           { true    };
 		bool                    _killed        { false   };
 
+		/* CPU of the thread that received the last signal, ~0 if none */
+		unsigned                _handler_cpu   { ~0U     };
+
 		/**
 		 * Tell receiver about the submits of the context if any
 		 */
@@ -172,6 +175,11 @@ class Kernel::Signal_context
 		 * Acknowledge delivery of signal
 		 */
 		void ack();
+
+		/**
+		 * CPU of the thread that received the last signal, ~0 if none
+		 */
+		unsigned handler_cpu() const { return _handler_cpu; }
 
 		enum class Kill_result { IN_DELIVERY, DONE };
 

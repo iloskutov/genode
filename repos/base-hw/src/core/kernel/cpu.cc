@@ -41,6 +41,9 @@ using namespace Kernel;
 void Cpu_context::_activate() { _cpu().assign(*this); }
 
 
+unsigned Cpu_context::cpu_id() const { return _cpu().id().value; }
+
+
 void Cpu_context::_deactivate()
 {
 	ASSERT(!remotely_running());

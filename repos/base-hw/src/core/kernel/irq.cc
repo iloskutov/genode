@@ -49,6 +49,20 @@ void User_irq::occurred()
 }
 
 
+void User_irq::enable() const
+{
+	unsigned const cpu = _context.handler_cpu();
+	if (cpu == ~0U) {
+		Irq::enable();
+		return;
+	}
+
+	Cpu::Id id { };
+	id.value = decltype(id.value)(cpu);
+	_pic.unmask(_id, id);
+}
+
+
 User_irq::User_irq(unsigned const id, Trigger trigger, Polarity polarity,
                    Signal_context &context, Controller &pic, Pool &pool)
 :

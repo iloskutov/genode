@@ -1,0 +1,46 @@
+#
+# A shared peripheral interrupt goes to the CPU of the thread that
+# acknowledges it (GICv3, src/test/irq_route)
+#
+
+assert {[have_spec hw]}
+assert {[have_spec arm_v8]}
+assert {[have_include power_on/qemu]}
+
+build { core init lib/ld test/irq_route }
+
+create_boot_directory
+
+install_config {
+config
++ parent-provides
+  + service LOG
+  + service PD
+  + service CPU
+  + service ROM
+  + service IO_MEM
+  + service IRQ
+
++ default-route
+  + any-service
+    + parent
+
++ start test-irq_route | caps: 200 | ram: 2M
+-
+}
+
+build_boot_image [build_artifacts]
+
+append qemu_args " -nographic -smp 4"
+
+run_genode_until {.*--- test (succeeded|failed) ---.*\n} 60
+
+grep_output {^\[init -> test-irq_route\] (IRQ|Error|--- test)}
+
+compare_output_to {
+[init -> test-irq_route] IRQ on CPU 0: route 0x0
+[init -> test-irq_route] IRQ on CPU 1: route 0x1
+[init -> test-irq_route] IRQ on CPU 2: route 0x2
+[init -> test-irq_route] IRQ on CPU 3: route 0x3
+[init -> test-irq_route] --- test succeeded ---
+}

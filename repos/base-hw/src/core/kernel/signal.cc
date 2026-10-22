@@ -181,6 +181,7 @@ Signal_receiver::Result Signal_receiver::_listen()
 		Signal::Data data(imprint, context->_submits);
 
 		/* communicate signal data to handler */
+		context->_handler_cpu = _handler->_thread.cpu_id();
 		_handler->_receiver = nullptr;
 		_handler->_thread.signal_receive_signal(&data, sizeof(data));
 		_handler = nullptr;

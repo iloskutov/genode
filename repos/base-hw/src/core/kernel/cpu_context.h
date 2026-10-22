@@ -126,6 +126,11 @@ class Kernel::Cpu_context : private Scheduler::Context
 		bool remotely_running();
 
 		/**
+		 * Index of the CPU the context is assigned to
+		 */
+		unsigned cpu_id() const;
+
+		/**
 		 * Handle exception that occured during execution of this context
 		 */
 		virtual void exception(Cpu_state&) = 0;

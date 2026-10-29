@@ -169,7 +169,7 @@ void Pager_entrypoint::Thread::entry()
 				.executable = _mapping.executable ? Hw::EXEC : Hw::NO_EXEC,
 				.privileged = Hw::USER,
 				.global     = Hw::NO_GLOBAL,
-				.type       = _mapping.io_mem ? Hw::DEVICE : Hw::RAM,
+				.type       = (_mapping.io_mem && cacheable == Genode::UNCACHED) ? Hw::DEVICE : Hw::RAM,
 				.cacheable  = cacheable
 			};
 

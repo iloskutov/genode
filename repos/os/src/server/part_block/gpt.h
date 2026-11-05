@@ -188,7 +188,7 @@ class Block::Gpt : public Block::Partition_table
 
 				/* check GPT entry array */
 				size_t length = entries() * entry_size();
-				Sync_read gpe(handler, alloc, gpe_lba(), length / block_size);
+				Sync_read gpe(handler, alloc, gpe_lba(), (length - 1) / block_size + 1);
 				if (!gpe.success()
 				 || crc32((addr_t)gpe.buffer().start, length) != read<Gpe_crc>())
 					return false;
@@ -360,8 +360,9 @@ class Block::Gpt : public Block::Partition_table
 			if (!gpt.valid(handler, _alloc, _info.block_size))
 				return false;
 
+			size_t length = gpt.entries() * gpt.entry_size();
 			Sync_read entry_array(handler, _alloc, gpt.gpe_lba(),
-			                      gpt.entries() * gpt.entry_size() / _info.block_size);
+			                      (length - 1) / _info.block_size + 1);
 			if (!entry_array.success())
 				return false;
 			Gpt_entry entries(entry_array.buffer());
@@ -370,7 +371,7 @@ class Block::Gpt : public Block::Partition_table
 			_gpt_total        = (gpt.part_lba_end() - gpt.part_lba_start()) + 1;
 			_gpt_used         = _calculate_used(gpt, entries, gpt.entries());
 
-			for (int i = 0; i < MAX_PARTITIONS; i++) {
+			for (int i = 0; i < (int)gpt.entries() && i < MAX_PARTITIONS; i++) {
 
 				Gpt_entry e(entries.range_at(i * gpt.entry_size()));
 

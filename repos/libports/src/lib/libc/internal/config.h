@@ -73,7 +73,7 @@ struct Libc::Config
 
 	static Config from_node(Node const &config)
 	{
-		Config result { };
+		Config result = _from_libc_node(Node());
 		config.with_optional_sub_node("libc", [&] (Node const &libc) {
 			result = _from_libc_node(libc); });
 		return result;

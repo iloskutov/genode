@@ -1,0 +1,39 @@
+#
+# Check that base-hw preserves tpidr_el0 per thread (needed by Android code)
+#
+
+assert {[have_spec arm_v8a]}
+assert {[have_spec hw]}
+
+build { core lib/ld init test/tpidr_el0 }
+
+create_boot_directory
+
+install_config {
+config
++ parent-provides
+  + service LOG
+  + service PD
+  + service CPU
+  + service ROM
+
++ default-route
+  + any-service
+    + parent
+
++ default | caps: 100 | ram: 1M
+
++ start test-tpidr_el0 | caps: 200 | ram: 2M
+-
+}
+
+build_boot_image [build_artifacts]
+
+append qemu_args " -nographic"
+
+run_genode_until {tpidr_el0 test passed.*\n|tpidr_el0 is not preserved.*\n} 120
+
+if {![regexp {tpidr_el0 test passed} $output]} {
+	puts stderr "Error: tpidr_el0 is not preserved per thread"
+	exit -1
+}

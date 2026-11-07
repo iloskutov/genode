@@ -77,6 +77,9 @@ struct Board::Cpu : Hw::Arm_64_cpu
 		uint128_t q[32];
 		uint64_t  fpcr { };
 
+		/* user thread pointer, e.g., bionic's TLS slots and canary */
+		uint64_t  tpidr_el0 { };
+
 		Context(bool privileged, Cpu &);
 
 		void print(Output &output) const;

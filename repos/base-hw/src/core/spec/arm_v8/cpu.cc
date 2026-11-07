@@ -38,6 +38,11 @@ void Cpu::Context::print(Output &output) const
 }
 
 
+/* exception_vector.s reserves and walks exactly this many bytes */
+static_assert(sizeof(Cpu::Context) == 0x340,
+              "CPU context layout no longer matches exception_vector.s");
+
+
 Cpu::Context::Context(bool privileged, Cpu &)
 {
 	Spsr::El::set(pstate, privileged ? 1 : 0);

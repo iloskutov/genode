@@ -65,8 +65,10 @@ _kernel_entry:
 	stp  q30, q31, [sp], #32
 	mrs  x0,  fpcr
 	str  x0,  [sp], #8
+	mrs  x0,  tpidr_el0
+	str  x0,  [sp], #8
 	msr  fpsr, xzr
-	sub  sp,  sp,  #0x338 /* overall cpu state size */
+	sub  sp,  sp,  #0x340 /* overall cpu state size */
 	mov  x0,  sp
 	bl _ZN6Kernel24main_handle_kernel_entryERN6Genode9Cpu_stateE
 
@@ -117,6 +119,8 @@ _kernel_entry:
 	ldp  q30, q31, [x1], #32
 	ldr  x3,  [x1], #8
 	msr  fpcr, x3
+	ldr  x3,  [x1], #8
+	msr  tpidr_el0, x3
 	add  x0,  x0,  #8
 	ldp  x1,  x2,  [x0], #16
 	ldp  x3,  x4,  [x0], #16

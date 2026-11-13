@@ -142,6 +142,7 @@ struct Scheduler_test::Main
 	void test_one_per_group();
 	void test_io_signal();
 	void test_all_and_yield();
+	void test_destroy_helped();
 
 	Main(Env &env) : env(env)
 	{
@@ -291,6 +292,35 @@ void Scheduler_test::Main::test_all_and_yield()
 	update_and_check(8700, APP2,    9200, __LINE__);
 }
 
+void Scheduler_test::Main::test_destroy_helped()
+{
+	auto check = [&] (bool ok, char const *what, unsigned line_nr) {
+		if (ok) return;
+		error(what, " in line ", line_nr);
+		env.parent().exit(-1);
+	};
+
+	/* two contexts help a third one, which is destroyed */
+	Context &first = contexts[APP1], &second = contexts[APP2];
+	{
+		Context destination { Gids::APP, "destination" };
+
+		first .help(destination);
+		second.help(destination);
+
+		check(&first.helping_destination()  == &destination &&
+		      &second.helping_destination() == &destination,
+		      "helpers do not execute their destination", __LINE__);
+	}
+
+	/* the pointers themselves: nothing of the destroyed context is read */
+	check(first._destination == nullptr,
+	      "first helper still helps the destroyed context", __LINE__);
+	check(second._destination == nullptr,
+	      "second helper still helps the destroyed context", __LINE__);
+}
+
+
 void Component::construct(Env &env)
 {
 	{
@@ -311,6 +341,11 @@ void Component::construct(Env &env)
 	{
 		Scheduler_test::Main main { env };
 		main.test_all_and_yield();
+	}
+
+	{
+		Scheduler_test::Main main { env };
+		main.test_destroy_helped();
 	}
 
 

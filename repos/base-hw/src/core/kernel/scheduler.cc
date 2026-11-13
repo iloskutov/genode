@@ -45,7 +45,8 @@ Scheduler::Context::~Context()
 {
 	helping_finished();
 
-	for (Context::List_element *h = _helper_list.first(); h; h = h->next())
+	/* 'helping_finished' removes the helper from the list */
+	while (Context::List_element *h = _helper_list.first())
 		h->object()->helping_finished();
 }
 

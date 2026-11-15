@@ -380,7 +380,11 @@ void Sandbox::Child::report_state(Generator &g, Report_detail const &detail) con
 		if (detail.ids())
 			g.attribute("id", _id.value);
 
-		if (stuck() || _state == State::RAM_INITIALIZED)
+		/*
+		 * A child whose environment sessions came up after its creation
+		 * runs although '_state' advances only at the next 'try_start'
+		 */
+		if (stuck() || (_state == State::RAM_INITIALIZED && !_child.active()))
 			g.attribute("state", "incomplete");
 
 		if (_exited)

@@ -15,6 +15,7 @@ SRC_CC += spec/arm/kernel/thread_caches.cc
 SRC_CC += spec/arm/platform_support.cc
 SRC_CC += spec/arm_v8/cpu.cc
 SRC_CC += spec/arm_v8/kernel/cpu.cc
+SRC_CC += spec/arm_v8/kernel/cpu_stats.cc
 SRC_CC += spec/arm_v8/kernel/thread.cc
 
 #add assembly sources

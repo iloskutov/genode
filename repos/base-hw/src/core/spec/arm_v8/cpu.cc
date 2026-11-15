@@ -200,4 +200,11 @@ void Cpu::print(Output &output) const
 }
 
 
-Cpu::Cpu() : _id(executing_id()) {}
+Cpu::Cpu() : _id(executing_id())
+{
+	/*
+	 * User level may read the physical counter (EL0PCTEN): the counter of
+	 * the CPU idle records ('Cpu_control::Cpu_stats')
+	 */
+	Cntkctl_el1::write(Cntkctl_el1::read() | 1);
+}

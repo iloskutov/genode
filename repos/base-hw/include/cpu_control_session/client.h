@@ -26,6 +26,8 @@ struct Genode::Cpu_control::Session_client : Rpc_client<Session>
 	Affinity_result affinity(Session_label const &label, Thread_name const &name,
 	                         Affinity::Location location) override {
 		return call<Rpc_affinity>(label, name, location); }
+
+	Dataspace_capability cpu_stats() override { return call<Rpc_cpu_stats>(); }
 };
 
 #endif /* _INCLUDE__CPU_CONTROL_SESSION__CLIENT_H_ */

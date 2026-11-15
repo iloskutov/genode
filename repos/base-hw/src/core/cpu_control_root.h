@@ -4,7 +4,7 @@
  * \date   2026-10-17
  *
  * A session moves threads named by their CPU session's label and their
- * name. Core forwards the move through the thread's trace source to its
+ * name, and hands out the kernel's CPU idle records. Core forwards the move through the thread's trace source to its
  * Cpu_thread_component and Platform_thread::affinity(). The service runs
  * on the entrypoint of the CPU service, so no thread vanishes during a
  * call: a thread's trace source is destructed before its platform thread.
@@ -30,6 +30,12 @@ namespace Core {
 
 	class Cpu_control_session_component;
 	struct Cpu_control_root;
+
+	/**
+	 * Dataspace of the kernel's 'Cpu_control::Cpu_stats', invalid if the
+	 * kernel keeps none
+	 */
+	Dataspace_capability cpu_stats_dataspace(Rpc_entrypoint &);
 }
 
 
@@ -37,12 +43,14 @@ class Core::Cpu_control_session_component : public Rpc_object<Cpu_control::Sessi
 {
 	private:
 
+		Rpc_entrypoint         &_ep;  /* of the CPU idle records */
 		Trace::Source_registry &_sources;
 
 	public:
 
-		Cpu_control_session_component(Trace::Source_registry &sources)
-		: _sources(sources) { }
+		Cpu_control_session_component(Rpc_entrypoint &ep,
+		                              Trace::Source_registry &sources)
+		: _ep(ep), _sources(sources) { }
 
 		Affinity_result affinity(Session_label const &label,
 		                         Thread_name const &name,
@@ -69,23 +77,26 @@ class Core::Cpu_control_session_component : public Rpc_object<Cpu_control::Sessi
 			});
 			return result;
 		}
+
+		Dataspace_capability cpu_stats() override { return cpu_stats_dataspace(_ep); }
 };
 
 
 struct Core::Cpu_control_root : Root_component<Cpu_control_session_component>
 {
+	Rpc_entrypoint         &_ep;
 	Trace::Source_registry &_sources;
 
 	Create_result _create_session(const char *) override
 	{
-		return _alloc_obj(_sources);
+		return _alloc_obj(_ep, _sources);
 	}
 
 	Cpu_control_root(Rpc_entrypoint &ep, Allocator &md_alloc,
 	                 Trace::Source_registry &sources)
 	:
 		Root_component<Cpu_control_session_component>(&ep, &md_alloc),
-		_sources(sources)
+		_ep(ep), _sources(sources)
 	{ }
 };
 

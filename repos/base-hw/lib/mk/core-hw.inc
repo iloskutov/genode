@@ -14,6 +14,7 @@ REP_INC_DIR += src/include
 # add C++ sources
 SRC_CC += cpu_session_component.cc
 SRC_CC += cpu_session_support.cc
+SRC_CC += cpu_stats.cc
 SRC_CC += cpu_thread_component.cc
 SRC_CC += core_log.cc
 SRC_CC += core_log_out.cc
@@ -47,6 +48,7 @@ SRC_CC += thread_start.cc
 SRC_CC += pager.cc
 SRC_CC += _main.cc
 SRC_CC += kernel/cpu.cc
+SRC_CC += kernel/cpu_stats.cc
 SRC_CC += kernel/scheduler.cc
 SRC_CC += kernel/ipc_node.cc
 SRC_CC += kernel/irq.cc

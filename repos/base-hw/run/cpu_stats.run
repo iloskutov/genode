@@ -1,0 +1,47 @@
+#
+# CPU idle records of the kernel ('Cpu_control::Cpu_stats'), see
+# test/cpu_stats: the idle times of a spinning and a quiet CPU
+#
+
+assert {[have_spec hw]}
+assert {[have_board virt_qemu_arm_v8a]}
+assert {[have_include power_on/qemu]}
+
+build { core init timer lib/ld test/cpu_stats }
+
+create_boot_directory
+
+install_config {
+config
++ parent-provides
+  + service LOG
+  + service PD
+  + service CPU
+  + service ROM
+  + service Cpu_control
+
++ affinity-space | width: 4 | height: 1
+
++ default-route
+  + service Timer | + child timer
+  + any-service   | + parent
+
++ default | caps: 100 | ram: 1M
+
++ start timer
+  + provides | + service Timer
+
++ start test-cpu_stats | ram: 2M
+-
+}
+
+build_boot_image [build_artifacts]
+
+append qemu_args " -nographic -smp 4,cores=4"
+
+run_genode_until {.*--- test (succeeded|failed) ---.*\n} 60
+
+if {![regexp {\[init -> test-cpu_stats\] --- test succeeded} $output]} {
+	puts "Error: test failed"; exit 1 }
+
+puts "Test succeeded"

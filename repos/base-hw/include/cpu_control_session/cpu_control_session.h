@@ -10,7 +10,11 @@
  * moves a thread of any component instead, named as the TRACE session
  * names it: by the label of its CPU session and its thread name.
  *
- * The service gives control over every thread of the system. Who may use
+ * It also hands out the kernel's records of the idle time of each CPU
+ * ('cpu_stats.h'), for a controller of the CPU clocks that samples often.
+ *
+ * The service gives control over every thread of the system, and its
+ * idle records show when other components run. Who may use
  * it is decided by the routes of the scenario, there is no further check.
  */
 
@@ -25,6 +29,7 @@
 #include <base/affinity.h>
 #include <base/rpc.h>
 #include <base/trace/types.h>
+#include <dataspace/capability.h>
 #include <session/session.h>
 
 namespace Genode { namespace Cpu_control { struct Session; } }
@@ -60,6 +65,12 @@ struct Genode::Cpu_control::Session : Genode::Session
 	                                 Thread_name const &name,
 	                                 Affinity::Location location) = 0;
 
+	/**
+	 * Read-only dataspace with the idle times of the CPUs as written by the
+	 * kernel, layout 'Cpu_control::Cpu_stats', invalid on kernels without
+	 */
+	virtual Dataspace_capability cpu_stats() = 0;
+
 
 	/*******************
 	 ** RPC interface **
@@ -68,7 +79,9 @@ struct Genode::Cpu_control::Session : Genode::Session
 	GENODE_RPC(Rpc_affinity, Affinity_result, affinity, Session_label const &,
 	           Thread_name const &, Affinity::Location);
 
-	GENODE_RPC_INTERFACE(Rpc_affinity);
+	GENODE_RPC(Rpc_cpu_stats, Dataspace_capability, cpu_stats);
+
+	GENODE_RPC_INTERFACE(Rpc_affinity, Rpc_cpu_stats);
 };
 
 #endif /* _INCLUDE__CPU_CONTROL_SESSION__CPU_CONTROL_SESSION_H_ */

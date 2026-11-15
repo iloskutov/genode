@@ -97,6 +97,9 @@ class Kernel::Cpu : public Board::Cpu, private Irq::Pool,
 		Board::Local_interrupt_controller _pic;
 		Timer       _timer;
 		Idle_thread _idle;
+
+		/* whether the idle thread runs, as last recorded in 'cpu_stats' */
+		bool _stats_idle { false };
 		Scheduler   _scheduler;
 		Ipi         _ipi_irq;
 		bool        _current_context_deleted { false };

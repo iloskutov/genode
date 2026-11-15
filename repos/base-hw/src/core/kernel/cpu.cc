@@ -16,6 +16,7 @@
 
 /* core includes */
 #include <kernel/cpu.h>
+#include <kernel/cpu_stats.h>
 #include <kernel/thread.h>
 #include <kernel/irq.h>
 #include <kernel/pd.h>
@@ -170,6 +171,12 @@ bool Cpu::handle_if_cpu_local_interrupt(unsigned const irq_id)
 Cpu::Context_change Cpu::schedule_next_context(Context &former)
 {
 	_scheduler.update();
+
+	bool const idle = (&current_context() == &_idle);
+	if (idle != _stats_idle) {
+		_stats_idle = idle;
+		cpu_stats_switch(_id.value, idle);
+	}
 
 	if (_current_context_deleted) {
 		_current_context_deleted = false;
